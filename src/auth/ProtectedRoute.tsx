@@ -15,13 +15,13 @@ const ROLE_HOME: Record<Role, string> = {
 };
 
 export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
 
   if (isLoading) {
     return null;
   }
 
-  if (!user) {
+  if (!user || !token) {
     return <Navigate to="/login" replace />;
   }
 

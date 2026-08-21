@@ -7,4 +7,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+    allowedHosts: [
+      "calamari-scrubbed-swarm.ngrok-free.dev",
+    ],
+  },
 });

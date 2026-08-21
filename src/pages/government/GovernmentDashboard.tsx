@@ -1,45 +1,64 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from 'recharts';
 import { DashboardShell } from '../../components/DashboardShell';
 import { Card } from '../../components/Card';
-import { SeverityBadge } from '../../components/SeverityBadge';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
-import { getAccidentTrends, getRiskPredictions } from '../../api';
-import type { AccidentTrend, RiskPrediction, RiskLevel } from '../../types';
+import {
+  getAccidentForecast,
+  getAccidentTrends,
+  getHistoricalAccidentTrends,
+} from '../../api';
+import { getApiErrorMessage } from '../../api/client';
+import type { AccidentForecast, AccidentTrend } from '../../types';
 
-// Map risk levels to severity badge values for color coding
-const RISK_TO_BADGE: Record<RiskLevel, 'Critical' | 'Moderate' | 'Minor'> = {
-  High: 'Critical',
-  Medium: 'Moderate',
-  Low: 'Minor',
+const RISK_BADGE_CLASSES = {
+  Low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  High: 'bg-red-50 text-red-700 border-red-200',
 };
 
 export function GovernmentDashboard() {
+  const [historicalTrends, setHistoricalTrends] = useState<AccidentTrend[]>([]);
   const [trends, setTrends] = useState<AccidentTrend[]>([]);
-  const [risks, setRisks] = useState<RiskPrediction[]>([]);
+  const [forecast, setForecast] = useState<AccidentForecast | null>(null);
+  const [isLoadingHistoricalTrends, setIsLoadingHistoricalTrends] = useState(true);
   const [isLoadingTrends, setIsLoadingTrends] = useState(true);
-  const [isLoadingRisks, setIsLoadingRisks] = useState(true);
+  const [isLoadingForecast, setIsLoadingForecast] = useState(true);
+  const [historicalTrendsError, setHistoricalTrendsError] = useState('');
+  const [trendsError, setTrendsError] = useState('');
+  const [forecastError, setForecastError] = useState('');
 
   useEffect(() => {
-    setIsLoadingTrends(true);
+    getHistoricalAccidentTrends()
+      .then(setHistoricalTrends)
+      .catch((error: unknown) => {
+        setHistoricalTrendsError(
+          getApiErrorMessage(error, 'Unable to load historical accident trends.'),
+        );
+      })
+      .finally(() => setIsLoadingHistoricalTrends(false));
+
     getAccidentTrends()
       .then(setTrends)
-      .catch(() => {})
+      .catch((error: unknown) => {
+        setTrendsError(getApiErrorMessage(error, 'Unable to load accident trends.'));
+      })
       .finally(() => setIsLoadingTrends(false));
 
-    setIsLoadingRisks(true);
-    getRiskPredictions()
-      .then(setRisks)
-      .catch(() => {})
-      .finally(() => setIsLoadingRisks(false));
+    getAccidentForecast()
+      .then(setForecast)
+      .catch((error: unknown) => {
+        setForecastError(getApiErrorMessage(error, 'Unable to load the accident forecast.'));
+      })
+      .finally(() => setIsLoadingForecast(false));
   }, []);
 
   return (
@@ -47,77 +66,115 @@ export function GovernmentDashboard() {
       <div className="space-y-6">
         <h1 className="text-xl font-semibold text-gray-900">Data mining insights</h1>
 
-        {/* Monthly accident trends */}
-        <Card title="Monthly accident trends">
-          {isLoadingTrends ? (
+        <Card title="Historical monthly accident trends — notebook dataset">
+          {isLoadingHistoricalTrends ? (
             <LoadingSpinner />
+          ) : historicalTrendsError ? (
+            <p className="text-sm text-red-600 py-4">{historicalTrendsError}</p>
+          ) : historicalTrends.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4">No historical accident data found.</p>
           ) : (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trends} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <BarChart data={historicalTrends} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
                     dataKey="month"
                     tick={{ fontSize: 12, fill: '#6b7280' }}
-                    axisLine={{ stroke: '#e5e7eb' }}
                     tickLine={false}
+                    interval="preserveStartEnd"
                   />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                    }}
-                    labelStyle={{ color: '#374151', fontWeight: 600 }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    fill="#7c3aed"
-                    radius={[4, 4, 0, 0]}
-                    name="Accidents"
-                  />
+                  <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} tickLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} name="Accidents" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           )}
         </Card>
 
-        {/* Future risk predictions */}
-        <Card title="Future risk predictions">
-          {isLoadingRisks ? (
+        <Card title="Monthly accident trends — database records">
+          {isLoadingTrends ? (
             <LoadingSpinner />
-          ) : risks.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4">No prediction data available.</p>
+          ) : trendsError ? (
+            <p className="text-sm text-red-600 py-4">{trendsError}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Region</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Risk level</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-500">Predicted accidents (next month)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {risks.map((r) => (
-                    <tr key={r.region} className="border-b border-gray-50 last:border-b-0">
-                      <td className="py-3 px-4 font-medium text-gray-900">{r.region}</td>
-                      <td className="py-3 px-4">
-                        <SeverityBadge value={RISK_TO_BADGE[r.risk_level]} />
-                      </td>
-                      <td className="py-3 px-4 text-right font-medium text-gray-900">
-                        {r.predicted_accidents}
-                      </td>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trends} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b7280' }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} tickLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} name="Accidents" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Card>
+
+        <Card title="Future monthly accident forecast — model output">
+          {isLoadingForecast ? (
+            <LoadingSpinner />
+          ) : forecastError ? (
+            <p className="text-sm text-red-600 py-4">{forecastError}</p>
+          ) : !forecast || forecast.status !== 'OK' ? (
+            <div className="py-4">
+              <p className="text-sm font-medium text-gray-700">Forecast unavailable</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {forecast?.message ?? 'Install the forecasting artifact and restart the backend.'}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-gray-500 mb-4">
+                {forecast.model_name}{forecast.model_version ? ` · ${forecast.model_version}` : ''}
+              </p>
+              {forecast.message && (
+                <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {forecast.message}
+                </p>
+              )}
+              {forecast.risk_thresholds && (
+                <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <span className="font-medium text-gray-700">Relative risk thresholds:</span>
+                  <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                    Low: &lt;{forecast.risk_thresholds.medium_min}
+                  </span>
+                  <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+                    Medium: {forecast.risk_thresholds.medium_min}–{forecast.risk_thresholds.high_min - 1}
+                  </span>
+                  <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+                    High: ≥{forecast.risk_thresholds.high_min}
+                  </span>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-medium text-gray-500">Month</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-500">Predicted accidents</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-500">Risk level</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {forecast.points.map((point) => (
+                      <tr key={point.period} className="border-b border-gray-50">
+                        <td className="py-3 px-4 font-medium text-gray-900">{point.period}</td>
+                        <td className="py-3 px-4 text-right text-gray-900">{point.predicted_accidents}</td>
+                        <td className="py-3 px-4 text-center">
+                          {point.risk_level ? (
+                            <span className={`inline-flex rounded border px-2 py-1 text-xs font-medium ${RISK_BADGE_CLASSES[point.risk_level]}`}>
+                              {point.risk_level}
+                            </span>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </Card>

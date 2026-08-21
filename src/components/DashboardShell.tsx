@@ -45,7 +45,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
               <div className="flex items-center gap-4">
                 <div className="hidden sm:block text-right">
                   <p className="text-sm font-medium text-gray-700">{user.name}</p>
-                  <p className="text-xs text-gray-500">{user.hospital_name}</p>
+                  <p className="text-xs text-gray-500">
+                    {user.role === 'admin' && !user.hospital_id ? 'All hospitals' : user.hospital_name}
+                  </p>
                 </div>
                 <button
                   onClick={handleLogout}

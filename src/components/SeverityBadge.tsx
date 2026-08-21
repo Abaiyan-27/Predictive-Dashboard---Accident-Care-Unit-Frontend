@@ -12,15 +12,17 @@ const BADGE_STYLES: Record<BadgeValue, string> = {
 };
 
 interface SeverityBadgeProps {
-  value: BadgeValue;
+  value: BadgeValue | null;
 }
 
 export function SeverityBadge({ value }: SeverityBadgeProps) {
-  const style = BADGE_STYLES[value] ?? 'bg-gray-50 text-gray-700 border-gray-200';
+  const style = value
+    ? BADGE_STYLES[value] ?? 'bg-gray-50 text-gray-700 border-gray-200'
+    : 'bg-gray-50 text-gray-600 border-gray-200';
 
   return (
     <span className={`inline-block px-2.5 py-0.5 text-xs font-medium rounded border ${style}`}>
-      {value}
+      {value ?? 'Unavailable'}
     </span>
   );
 }

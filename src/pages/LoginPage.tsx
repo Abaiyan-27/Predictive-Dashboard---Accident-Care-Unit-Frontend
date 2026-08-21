@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import type { Role } from '../types';
+import { getApiErrorMessage } from '../api/client';
 
 const ROLE_HOME: Record<Role, string> = {
   nurse: '/nurse',
@@ -9,19 +10,6 @@ const ROLE_HOME: Record<Role, string> = {
   admin: '/admin',
   government: '/government',
 };
-
-interface DemoAccount {
-  label: string;
-  email: string;
-  password: string;
-}
-
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  { label: 'Login as Nurse', email: 'nurse@accidentcare.org', password: 'demo' },
-  { label: 'Login as Doctor', email: 'doctor@accidentcare.org', password: 'demo' },
-  { label: 'Login as Admin', email: 'admin@accidentcare.org', password: 'demo' },
-  { label: 'Login as Government', email: 'gov@accidentcare.org', password: 'demo' },
-];
 
 export function LoginPage() {
   const { login, user } = useAuth();
@@ -33,8 +21,7 @@ export function LoginPage() {
 
   // If already logged in, redirect
   if (user) {
-    navigate(ROLE_HOME[user.role], { replace: true });
-    return null;
+    return <Navigate to={ROLE_HOME[user.role]} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,35 +30,10 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login({ email, password });
-      // After login, user state updates and we read the role to navigate
-      const storedUser = localStorage.getItem('ac_user');
-      if (storedUser) {
-        const parsed = JSON.parse(storedUser) as { role: Role };
-        navigate(ROLE_HOME[parsed.role], { replace: true });
-      }
-    } catch {
-      setError('Invalid email or password');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDemoLogin = async (account: DemoAccount) => {
-    setEmail(account.email);
-    setPassword(account.password);
-    setError('');
-    setIsSubmitting(true);
-
-    try {
-      await login({ email: account.email, password: account.password });
-      const storedUser = localStorage.getItem('ac_user');
-      if (storedUser) {
-        const parsed = JSON.parse(storedUser) as { role: Role };
-        navigate(ROLE_HOME[parsed.role], { replace: true });
-      }
-    } catch {
-      setError('Login failed');
+      const authenticatedUser = await login({ email, password });
+      navigate(ROLE_HOME[authenticatedUser.role], { replace: true });
+    } catch (loginError) {
+      setError(getApiErrorMessage(loginError, 'Unable to sign in.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -139,24 +101,9 @@ export function LoginPage() {
           </form>
         </div>
 
-        {/* Demo accounts */}
-        <div className="mt-6">
-          <p className="text-xs text-center text-gray-400 mb-3">
-            Demo accounts
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((account) => (
-              <button
-                key={account.email}
-                onClick={() => handleDemoLogin(account)}
-                disabled={isSubmitting}
-                className="py-2 px-3 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {account.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <p className="mt-5 text-xs text-center text-gray-400">
+          Sign in with an account provisioned in Accident Care.
+        </p>
       </div>
     </div>
   );

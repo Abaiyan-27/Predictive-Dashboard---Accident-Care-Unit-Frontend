@@ -6,20 +6,22 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { useAuth } from '../../auth/AuthContext';
 import {
-  getHospitalStatus,
+  getHospital,
+  getHospitals,
   getAdmittedPatients,
   createUser,
   getTransferRequests,
   updateTransferStatus,
   getAuditLogs,
 } from '../../api';
+import { getApiErrorMessage } from '../../api/client';
 import type {
-  HospitalStatus,
+  HospitalInfo,
   Patient,
   TransferRequest,
   AuditLog,
   CreateUserPayload,
-  Role,
+  StaffRole,
   TransferStatus,
 } from '../../types';
 
@@ -32,7 +34,7 @@ const TABS: { key: AdminTab; label: string }[] = [
   { key: 'logs', label: 'System logs' },
 ];
 
-const ROLE_OPTIONS: { value: Role; label: string }[] = [
+const ROLE_OPTIONS: { value: StaffRole; label: string }[] = [
   { value: 'nurse', label: 'Nurse' },
   { value: 'doctor', label: 'Doctor' },
   { value: 'admin', label: 'Administrator' },
@@ -43,56 +45,109 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>('status');
 
   // Hospital status state
-  const [hospitalStatus, setHospitalStatus] = useState<HospitalStatus | null>(null);
+  const [hospital, setHospital] = useState<HospitalInfo | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+  const [statusError, setStatusError] = useState('');
 
   // User management state
   const [userForm, setUserForm] = useState<CreateUserPayload>({
     name: '',
     email: '',
+    password: '',
     role: 'nurse',
-    hospital_id: '',
+    hospital_id: user?.hospital_id ?? '',
   });
+  const [hospitals, setHospitals] = useState<HospitalInfo[]>([]);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [userCreated, setUserCreated] = useState(false);
+  const [userError, setUserError] = useState('');
 
   // Transfers state
   const [transfers, setTransfers] = useState<TransferRequest[]>([]);
   const [isLoadingTransfers, setIsLoadingTransfers] = useState(true);
   const [updatingTransferId, setUpdatingTransferId] = useState<string | null>(null);
+  const [transferError, setTransferError] = useState('');
 
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
+  const [logsError, setLogsError] = useState('');
 
   // ── Fetch hospital status data ──────────────────────────────────────────
 
   useEffect(() => {
     if (activeTab !== 'status' || !user) return;
 
+    let cancelled = false;
     setIsLoadingStatus(true);
-    Promise.all([
-      getHospitalStatus(),
-      getAdmittedPatients(user.hospital_id),
-    ])
-      .then(([status, pts]) => {
-        setHospitalStatus(status);
-        setPatients(pts);
-      })
-      .catch(() => {})
-      .finally(() => setIsLoadingStatus(false));
+    setStatusError('');
+
+    const loadStatus = async () => {
+      try {
+        if (user.hospital_id) {
+          const [hospitalInfo, pts] = await Promise.all([
+            getHospital(user.hospital_id),
+            getAdmittedPatients(user.hospital_id),
+          ]);
+          if (!cancelled) {
+            setHospital(hospitalInfo);
+            setPatients(pts);
+          }
+          return;
+        }
+
+        const allHospitals = await getHospitals();
+        const patientGroups = await Promise.all(
+          allHospitals.map((item) => getAdmittedPatients(item.hospital_id)),
+        );
+        if (!cancelled) {
+          setHospitals(allHospitals);
+          setHospital({
+            hospital_id: 'all',
+            name: 'All hospitals',
+            type: `${allHospitals.length} registered`,
+            region: null,
+            district: null,
+            address: null,
+          });
+          setPatients(patientGroups.flat());
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStatusError(getApiErrorMessage(error, 'Unable to load hospital status.'));
+        }
+      } finally {
+        if (!cancelled) setIsLoadingStatus(false);
+      }
+    };
+
+    loadStatus();
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, user]);
+
+  useEffect(() => {
+    if (activeTab !== 'users') return;
+    setUserError('');
+    getHospitals()
+      .then(setHospitals)
+      .catch((error: unknown) => {
+        setUserError(getApiErrorMessage(error, 'Unable to load hospitals.'));
+      });
+  }, [activeTab]);
 
   // ── Fetch transfers ─────────────────────────────────────────────────────
 
   const fetchTransfers = useCallback(async () => {
     setIsLoadingTransfers(true);
+    setTransferError('');
     try {
       const data = await getTransferRequests();
       setTransfers(data);
-    } catch {
-      // silently handle
+    } catch (error) {
+      setTransferError(getApiErrorMessage(error, 'Unable to load transfer requests.'));
     } finally {
       setIsLoadingTransfers(false);
     }
@@ -110,9 +165,12 @@ export function AdminDashboard() {
     if (activeTab !== 'logs') return;
 
     setIsLoadingLogs(true);
+    setLogsError('');
     getAuditLogs()
       .then(setAuditLogs)
-      .catch(() => {})
+      .catch((error: unknown) => {
+        setLogsError(getApiErrorMessage(error, 'Unable to load audit logs.'));
+      })
       .finally(() => setIsLoadingLogs(false));
   }, [activeTab]);
 
@@ -129,13 +187,20 @@ export function AdminDashboard() {
     e.preventDefault();
     setIsCreatingUser(true);
     setUserCreated(false);
+    setUserError('');
 
     try {
       await createUser(userForm);
       setUserCreated(true);
-      setUserForm({ name: '', email: '', role: 'nurse', hospital_id: '' });
-    } catch {
-      // Handle error
+      setUserForm({
+        name: '',
+        email: '',
+        password: '',
+        role: 'nurse',
+        hospital_id: user?.hospital_id ?? '',
+      });
+    } catch (error) {
+      setUserError(getApiErrorMessage(error, 'Unable to create the user account.'));
     } finally {
       setIsCreatingUser(false);
     }
@@ -143,11 +208,12 @@ export function AdminDashboard() {
 
   const handleTransferAction = async (id: string, status: TransferStatus) => {
     setUpdatingTransferId(id);
+    setTransferError('');
     try {
       await updateTransferStatus(id, status);
       await fetchTransfers();
-    } catch {
-      // Handle error
+    } catch (error) {
+      setTransferError(getApiErrorMessage(error, 'Unable to update the transfer.'));
     } finally {
       setUpdatingTransferId(null);
     }
@@ -160,32 +226,42 @@ export function AdminDashboard() {
 
     return (
       <div className="space-y-6">
-        {/* Bed capacity summary */}
-        {hospitalStatus && (
+        {statusError && (
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            {statusError}
+          </div>
+        )}
+        {/* Hospital summary */}
+        {hospital && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
-              <p className="text-sm text-gray-500">Total beds</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">
-                {hospitalStatus.total_beds}
+              <p className="text-sm text-gray-500">{user?.hospital_id ? 'Hospital' : 'Scope'}</p>
+              <p className="text-lg font-semibold text-gray-900 mt-1">
+                {hospital.name}
               </p>
             </Card>
             <Card>
-              <p className="text-sm text-gray-500">Occupied</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">
-                {hospitalStatus.occupied_beds}
+              <p className="text-sm text-gray-500">Type</p>
+              <p className="text-lg font-semibold text-gray-900 mt-1">
+                {hospital.type ?? 'Not specified'}
               </p>
             </Card>
             <Card>
-              <p className="text-sm text-gray-500">Available</p>
-              <p className="text-2xl font-semibold text-emerald-700 mt-1">
-                {hospitalStatus.available_beds}
+              <p className="text-sm text-gray-500">Current patients</p>
+              <p className="text-2xl font-semibold text-purple-700 mt-1">
+                {patients.length}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {user?.hospital_id
+                  ? ([hospital.district, hospital.region].filter(Boolean).join(', ') || 'Location not specified')
+                  : 'System-wide view'}
               </p>
             </Card>
           </div>
         )}
 
         {/* Patient table with predicted LOS */}
-        <Card title="Current patients — predicted length of stay">
+        <Card title="Current patients — model-predicted stay">
           {patients.length === 0 ? (
             <p className="text-sm text-gray-500 py-4">No patients found.</p>
           ) : (
@@ -196,7 +272,7 @@ export function AdminDashboard() {
                     <th className="text-left py-3 px-4 font-medium text-gray-500">Name</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-500">Admission date</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-500">Severity</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-500">Predicted LOS (days)</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-500">Predicted stay</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,7 +284,7 @@ export function AdminDashboard() {
                         <SeverityBadge value={p.severity} />
                       </td>
                       <td className="py-3 px-4 text-right font-medium text-gray-900">
-                        {p.predicted_los_days}
+                        {p.predicted_los ?? 'Unavailable'}
                       </td>
                     </tr>
                   ))}
@@ -226,6 +302,11 @@ export function AdminDashboard() {
       {userCreated && (
         <div className="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">
           User account created successfully.
+        </div>
+      )}
+      {userError && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          {userError}
         </div>
       )}
       <form onSubmit={handleCreateUser} className="space-y-4">
@@ -259,6 +340,22 @@ export function AdminDashboard() {
             />
           </div>
           <div>
+            <label htmlFor="user-password" className="block text-sm font-medium text-gray-700 mb-1">
+              Temporary password
+            </label>
+            <input
+              id="user-password"
+              name="password"
+              type="password"
+              minLength={8}
+              required
+              value={userForm.password}
+              onChange={handleUserFormChange}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="At least 8 characters"
+            />
+          </div>
+          <div>
             <label htmlFor="user-role" className="block text-sm font-medium text-gray-700 mb-1">
               Role
             </label>
@@ -278,18 +375,23 @@ export function AdminDashboard() {
           </div>
           <div>
             <label htmlFor="user-hospital" className="block text-sm font-medium text-gray-700 mb-1">
-              Hospital ID
+              Hospital
             </label>
-            <input
+            <select
               id="user-hospital"
               name="hospital_id"
-              type="text"
               required
               value={userForm.hospital_id}
               onChange={handleUserFormChange}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-              placeholder="e.g. h-001"
-            />
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+            >
+              <option value="">Select hospital</option>
+              {hospitals.map((item) => (
+                <option key={item.hospital_id} value={item.hospital_id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -309,6 +411,11 @@ export function AdminDashboard() {
 
     return (
       <Card title="Transfer requests">
+        {transferError && (
+          <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            {transferError}
+          </div>
+        )}
         {transfers.length === 0 ? (
           <p className="text-sm text-gray-500 py-4">No transfer requests.</p>
         ) : (
@@ -333,14 +440,17 @@ export function AdminDashboard() {
                       <StatusBadge status={t.status} />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {t.status === 'pending' ? (
+                      {t.status === 'pending_authorization' || t.status === 'authorized' ? (
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleTransferAction(t.id, 'approved')}
+                            onClick={() => handleTransferAction(
+                              t.id,
+                              t.status === 'pending_authorization' ? 'authorized' : 'approved',
+                            )}
                             disabled={updatingTransferId === t.id}
                             className="px-3 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 disabled:opacity-50 transition-colors"
                           >
-                            Approve
+                            {t.status === 'pending_authorization' ? 'Authorize' : 'Approve'}
                           </button>
                           <button
                             onClick={() => handleTransferAction(t.id, 'rejected')}
@@ -369,6 +479,11 @@ export function AdminDashboard() {
 
     return (
       <Card title="Audit log">
+        {logsError && (
+          <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            {logsError}
+          </div>
+        )}
         {auditLogs.length === 0 ? (
           <p className="text-sm text-gray-500 py-4">No log entries.</p>
         ) : (

@@ -8,7 +8,7 @@ interface PatientListItemProps {
 }
 
 export function PatientListItem({ patient, badgeType = 'severity', onClick }: PatientListItemProps) {
-  const badgeValue: Severity | Priority = badgeType === 'priority' ? patient.priority : patient.severity;
+  const badgeValue: Severity | Priority | null = badgeType === 'priority' ? patient.priority : patient.severity;
 
   return (
     <div
