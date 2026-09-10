@@ -77,6 +77,11 @@ const EMPTY_FORM: PatientIntakeForm = {
   illicit_drugs: '',
 };
 
+/* Dark-themed label helper */
+const labelClass = "block text-sm font-medium mb-1.5";
+const labelStyle = { color: 'var(--text-secondary)' };
+const requiredStar = <span style={{ color: '#f87171' }} aria-hidden="true">*</span>;
+
 export function NurseDashboard() {
   const { user } = useAuth();
   const [form, setForm] = useState<PatientIntakeForm>({ ...EMPTY_FORM });
@@ -143,24 +148,33 @@ export function NurseDashboard() {
   return (
     <DashboardShell>
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold text-gray-900">Patient intake</h1>
+        <h1 className="text-xl font-semibold gradient-text">Patient intake</h1>
 
         {/* Severity result banner */}
         {resultPatient && (
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div
+            className="glass-card p-6"
+            style={{
+              borderColor: 'rgba(16, 185, 129, 0.3)',
+              boxShadow: '0 0 20px rgba(16, 185, 129, 0.1)',
+              cursor: 'default',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'none'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+          >
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">
+                <h3 className="text-sm font-semibold mb-1" style={{ color: '#6ee7b7' }}>
                   Severity assessment complete
                 </h3>
-                <p className="text-sm text-gray-600 mb-3">
-                  Patient <span className="font-medium">{resultPatient.name}</span> has been assessed.
+                <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
+                  Patient <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{resultPatient.name}</span> has been assessed.
                 </p>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500">Patient severity score:</span>
+                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Patient severity score:</span>
                   <SeverityBadge value={resultPatient.severity} />
                 </div>
-                <div className="mt-3 space-y-1 text-xs text-gray-500">
+                <div className="mt-3 space-y-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                   <p>
                     Predicted stay:{' '}
                     {resultPatient.predicted_los
@@ -176,7 +190,10 @@ export function NurseDashboard() {
               </div>
               <button
                 onClick={dismissResult}
-                className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-sm transition-colors duration-200"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
                 Dismiss
               </button>
@@ -187,184 +204,132 @@ export function NurseDashboard() {
         {/* Intake form */}
         <Card title="New patient record">
           {submitError && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            <div
+              className="mb-4 px-4 py-3 rounded-lg text-sm"
+              style={{
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
               {submitError}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <p className="text-xs text-gray-500">
-              Fields marked <span className="font-semibold text-red-500">*</span> are required
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Fields marked <span className="font-semibold" style={{ color: '#f87171' }}>*</span> are required
               for the minimum complete model input set.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Patient name <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="name" className={labelClass} style={labelStyle}>
+                  Patient name {requiredStar}
                 </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
+                <input id="name" name="name" type="text" required value={form.name} onChange={handleChange}
+                  className="w-full px-4 py-2.5 text-sm dark-input" />
               </div>
 
               <div>
-                <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
-                  Age <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="age" className={labelClass} style={labelStyle}>
+                  Age {requiredStar}
                 </label>
-                <input
-                  id="age"
-                  name="age"
-                  type="number"
-                  min={1}
-                  max={100}
-                  required
-                  value={form.age ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
+                <input id="age" name="age" type="number" min={1} max={100} required value={form.age ?? ''}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input" />
               </div>
 
               <div>
-                <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1">
-                  Gender
-                </label>
-                <select
-                  id="gender"
-                  name="gender"
-                  value={form.gender}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                >
+                <label htmlFor="gender" className={labelClass} style={labelStyle}>Gender</label>
+                <select id="gender" name="gender" value={form.gender} onChange={handleChange}
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Not provided</option>
-                  {GENDERS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
+                  {GENDERS.map((g) => (<option key={g} value={g}>{g}</option>))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="incident_at" className="block text-sm font-medium text-gray-700 mb-1">
-                  Incident date and time <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="incident_at" className={labelClass} style={labelStyle}>
+                  Incident date and time {requiredStar}
                 </label>
-                <input
-                  id="incident_at"
-                  name="incident_at"
-                  type="datetime-local"
-                  required
-                  value={form.incident_at}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
+                <input id="incident_at" name="incident_at" type="datetime-local" required
+                  value={form.incident_at} onChange={handleChange}
+                  className="w-full px-4 py-2.5 text-sm dark-input" />
               </div>
 
               <div>
-                <label htmlFor="collision_type" className="block text-sm font-medium text-gray-700 mb-1">
-                  Collision type <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="collision_type" className={labelClass} style={labelStyle}>
+                  Collision type {requiredStar}
                 </label>
-                <select
-                  id="collision_type"
-                  name="collision_type"
-                  required
-                  value={form.collision_type}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                >
+                <select id="collision_type" name="collision_type" required value={form.collision_type}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select type</option>
-                  {COLLISION_TYPES.map((ct) => (
-                    <option key={ct} value={ct}>
-                      {ct}
-                    </option>
-                  ))}
+                  {COLLISION_TYPES.map((ct) => (<option key={ct} value={ct}>{ct}</option>))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="mode_of_transport" className="block text-sm font-medium text-gray-700 mb-1">
-                  Transport to hospital <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="mode_of_transport" className={labelClass} style={labelStyle}>
+                  Transport to hospital {requiredStar}
                 </label>
-                <select
-                  id="mode_of_transport"
-                  name="mode_of_transport"
-                  required
-                  value={form.mode_of_transport}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                >
+                <select id="mode_of_transport" name="mode_of_transport" required value={form.mode_of_transport}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select transport</option>
-                  {TRANSPORT_MODES.map((mode) => (
-                    <option key={mode} value={mode}>{mode}</option>
-                  ))}
+                  {TRANSPORT_MODES.map((mode) => (<option key={mode} value={mode}>{mode}</option>))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="time_to_hospital" className="block text-sm font-medium text-gray-700 mb-1">
-                  Time to hospital <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="time_to_hospital" className={labelClass} style={labelStyle}>
+                  Time to hospital {requiredStar}
                 </label>
-                <select
-                  id="time_to_hospital"
-                  name="time_to_hospital"
-                  required
-                  value={form.time_to_hospital}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                >
+                <select id="time_to_hospital" name="time_to_hospital" required value={form.time_to_hospital}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select travel time</option>
-                  {TRAVEL_TIMES.map((time) => (
-                    <option key={time} value={time}>{time}</option>
-                  ))}
+                  {TRAVEL_TIMES.map((time) => (<option key={time} value={time}>{time}</option>))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="vehicle_type" className="block text-sm font-medium text-gray-700 mb-1">
-                  Vehicle type <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="vehicle_type" className={labelClass} style={labelStyle}>
+                  Vehicle type {requiredStar}
                 </label>
-                <select id="vehicle_type" name="vehicle_type" required value={form.vehicle_type} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                <select id="vehicle_type" name="vehicle_type" required value={form.vehicle_type}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select vehicle</option>
                   {VEHICLE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="road_type" className="block text-sm font-medium text-gray-700 mb-1">Road type <span className="text-red-500" aria-hidden="true">*</span></label>
+                <label htmlFor="road_type" className={labelClass} style={labelStyle}>Road type {requiredStar}</label>
                 <select id="road_type" name="road_type" required value={form.road_type} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select road type</option>
                   {ROAD_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="speed" className="block text-sm font-medium text-gray-700 mb-1">Approximate speed <span className="text-red-500" aria-hidden="true">*</span></label>
+                <label htmlFor="speed" className={labelClass} style={labelStyle}>Approximate speed {requiredStar}</label>
                 <select id="speed" name="speed" required value={form.speed} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select speed</option>
                   {SPEEDS.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="collision_force_from" className="block text-sm font-medium text-gray-700 mb-1">Collision force from <span className="text-red-500" aria-hidden="true">*</span></label>
-                <select id="collision_force_from" name="collision_force_from" required value={form.collision_force_from} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                <label htmlFor="collision_force_from" className={labelClass} style={labelStyle}>Collision force from {requiredStar}</label>
+                <select id="collision_force_from" name="collision_force_from" required value={form.collision_force_from}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select direction</option>
                   {COLLISION_FORCES.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="visibility" className="block text-sm font-medium text-gray-700 mb-1">Visibility <span className="text-red-500" aria-hidden="true">*</span></label>
+                <label htmlFor="visibility" className={labelClass} style={labelStyle}>Visibility {requiredStar}</label>
                 <select id="visibility" name="visibility" required value={form.visibility} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select visibility</option>
                   <option value="adequate">adequate</option>
                   <option value="poor">poor</option>
@@ -372,73 +337,66 @@ export function NurseDashboard() {
               </div>
 
               <div>
-                <label htmlFor="road_condition" className="block text-sm font-medium text-gray-700 mb-1">Road condition <span className="text-red-500" aria-hidden="true">*</span></label>
-                <input id="road_condition" name="road_condition" required value={form.road_condition} onChange={handleChange}
-                  placeholder="e.g. dry, wet" className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                <label htmlFor="road_condition" className={labelClass} style={labelStyle}>Road condition {requiredStar}</label>
+                <input id="road_condition" name="road_condition" required value={form.road_condition}
+                  onChange={handleChange} placeholder="e.g. dry, wet"
+                  className="w-full px-4 py-2.5 text-sm dark-input" />
               </div>
 
               <div>
-                <label htmlFor="helmet_worn" className="block text-sm font-medium text-gray-700 mb-1">Helmet worn</label>
+                <label htmlFor="helmet_worn" className={labelClass} style={labelStyle}>Helmet worn</label>
                 <select id="helmet_worn" name="helmet_worn" value={form.helmet_worn} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Not applicable / unknown</option>
                   {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="road_signals_exist" className="block text-sm font-medium text-gray-700 mb-1">Road signals existed</label>
-                <select id="road_signals_exist" name="road_signals_exist" value={form.road_signals_exist} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                <label htmlFor="road_signals_exist" className={labelClass} style={labelStyle}>Road signals existed</label>
+                <select id="road_signals_exist" name="road_signals_exist" value={form.road_signals_exist}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Unknown</option>
                   {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="alcohol_consumption" className="block text-sm font-medium text-gray-700 mb-1">Alcohol consumption <span className="text-red-500" aria-hidden="true">*</span></label>
-                <select id="alcohol_consumption" name="alcohol_consumption" required value={form.alcohol_consumption} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                <label htmlFor="alcohol_consumption" className={labelClass} style={labelStyle}>Alcohol consumption {requiredStar}</label>
+                <select id="alcohol_consumption" name="alcohol_consumption" required value={form.alcohol_consumption}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select</option>
                   {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="illicit_drugs" className="block text-sm font-medium text-gray-700 mb-1">Illicit drugs</label>
+                <label htmlFor="illicit_drugs" className={labelClass} style={labelStyle}>Illicit drugs</label>
                 <select id="illicit_drugs" name="illicit_drugs" value={form.illicit_drugs} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Unknown</option>
                   {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="site_of_injury" className="block text-sm font-medium text-gray-700 mb-1">
-                  Primary injury site <span className="text-red-500" aria-hidden="true">*</span>
+                <label htmlFor="site_of_injury" className={labelClass} style={labelStyle}>
+                  Primary injury site {requiredStar}
                 </label>
-                <select
-                  id="site_of_injury"
-                  name="site_of_injury"
-                  required
-                  value={form.site_of_injury}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                >
+                <select id="site_of_injury" name="site_of_injury" required value={form.site_of_injury}
+                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select injury site</option>
-                  {INJURY_SITES.map((site) => (
-                    <option key={site} value={site}>{site}</option>
-                  ))}
+                  {INJURY_SITES.map((site) => (<option key={site} value={site}>{site}</option>))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor="secondary_site_of_injury" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="secondary_site_of_injury" className={labelClass} style={labelStyle}>
                   Secondary injury site
                 </label>
                 <select id="secondary_site_of_injury" name="secondary_site_of_injury"
                   value={form.secondary_site_of_injury} onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">None</option>
                   {INJURY_SITES.map((site) => <option key={site} value={site}>{site}</option>)}
                 </select>
@@ -446,33 +404,27 @@ export function NurseDashboard() {
             </div>
 
             <div>
-              <label htmlFor="injury_description" className="block text-sm font-medium text-gray-700 mb-1">
-                Injury description <span className="text-red-500" aria-hidden="true">*</span>
+              <label htmlFor="injury_description" className={labelClass} style={labelStyle}>
+                Injury description {requiredStar}
               </label>
-              <textarea
-                id="injury_description"
-                name="injury_description"
-                required
-                rows={3}
-                value={form.injury_description}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-vertical"
-              />
+              <textarea id="injury_description" name="injury_description" required rows={3}
+                value={form.injury_description} onChange={handleChange}
+                className="w-full px-4 py-2.5 text-sm dark-input resize-vertical" />
             </div>
 
             <div>
-              <label htmlFor="secondary_injury_description" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="secondary_injury_description" className={labelClass} style={labelStyle}>
                 Secondary injury description
               </label>
               <textarea id="secondary_injury_description" name="secondary_injury_description" rows={2}
                 value={form.secondary_injury_description} onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 resize-vertical" />
+                className="w-full px-4 py-2.5 text-sm dark-input resize-vertical" />
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="py-2 px-6 text-sm font-medium text-white bg-purple-600 rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="py-2.5 px-6 text-sm gradient-btn"
             >
               {isSubmitting ? 'Submitting...' : 'Submit and run available models'}
             </button>
@@ -482,16 +434,26 @@ export function NurseDashboard() {
         {/* My records */}
         <Card title="My patient records">
           {patientsError && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            <div
+              className="mb-4 px-4 py-3 rounded-lg text-sm"
+              style={{
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
               {patientsError}
             </div>
           )}
           {isLoadingPatients ? (
             <LoadingSpinner />
           ) : myPatients.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4">No patient records yet.</p>
+            <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>No patient records yet.</p>
           ) : (
-            <div className="border border-gray-100 rounded overflow-hidden">
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ border: '1px solid var(--border-subtle)' }}
+            >
               {myPatients.map((p) => (
                 <PatientListItem key={p.id} patient={p} badgeType="severity" />
               ))}

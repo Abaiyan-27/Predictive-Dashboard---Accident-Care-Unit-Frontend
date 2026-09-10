@@ -2,13 +2,50 @@ import type { Severity, Priority } from '../types';
 
 type BadgeValue = Severity | Priority;
 
-const BADGE_STYLES: Record<BadgeValue, string> = {
-  Critical: 'bg-red-50 text-red-700 border-red-200',
-  High: 'bg-red-50 text-red-700 border-red-200',
-  Moderate: 'bg-amber-50 text-amber-700 border-amber-200',
-  Medium: 'bg-amber-50 text-amber-700 border-amber-200',
-  Minor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+const BADGE_STYLES: Record<BadgeValue, { bg: string; color: string; border: string; glow: string }> = {
+  Critical: {
+    bg: 'rgba(239, 68, 68, 0.15)',
+    color: '#fca5a5',
+    border: 'rgba(239, 68, 68, 0.3)',
+    glow: '0 0 12px rgba(239, 68, 68, 0.2)',
+  },
+  High: {
+    bg: 'rgba(239, 68, 68, 0.15)',
+    color: '#fca5a5',
+    border: 'rgba(239, 68, 68, 0.3)',
+    glow: '0 0 12px rgba(239, 68, 68, 0.2)',
+  },
+  Moderate: {
+    bg: 'rgba(245, 158, 11, 0.15)',
+    color: '#fcd34d',
+    border: 'rgba(245, 158, 11, 0.3)',
+    glow: '0 0 12px rgba(245, 158, 11, 0.15)',
+  },
+  Medium: {
+    bg: 'rgba(245, 158, 11, 0.15)',
+    color: '#fcd34d',
+    border: 'rgba(245, 158, 11, 0.3)',
+    glow: '0 0 12px rgba(245, 158, 11, 0.15)',
+  },
+  Minor: {
+    bg: 'rgba(16, 185, 129, 0.15)',
+    color: '#6ee7b7',
+    border: 'rgba(16, 185, 129, 0.3)',
+    glow: '0 0 12px rgba(16, 185, 129, 0.15)',
+  },
+  Low: {
+    bg: 'rgba(16, 185, 129, 0.15)',
+    color: '#6ee7b7',
+    border: 'rgba(16, 185, 129, 0.3)',
+    glow: '0 0 12px rgba(16, 185, 129, 0.15)',
+  },
+};
+
+const DEFAULT_STYLE = {
+  bg: 'rgba(100, 116, 139, 0.15)',
+  color: '#94a3b8',
+  border: 'rgba(100, 116, 139, 0.3)',
+  glow: 'none',
 };
 
 interface SeverityBadgeProps {
@@ -16,12 +53,18 @@ interface SeverityBadgeProps {
 }
 
 export function SeverityBadge({ value }: SeverityBadgeProps) {
-  const style = value
-    ? BADGE_STYLES[value] ?? 'bg-gray-50 text-gray-700 border-gray-200'
-    : 'bg-gray-50 text-gray-600 border-gray-200';
+  const style = value ? (BADGE_STYLES[value] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
 
   return (
-    <span className={`inline-block px-2.5 py-0.5 text-xs font-medium rounded border ${style}`}>
+    <span
+      className="inline-block px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200"
+      style={{
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+        boxShadow: style.glow,
+      }}
+    >
       {value ?? 'Unavailable'}
     </span>
   );

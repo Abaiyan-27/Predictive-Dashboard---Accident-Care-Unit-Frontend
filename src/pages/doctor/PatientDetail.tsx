@@ -51,39 +51,70 @@ const SECONDARY_MANAGEMENT_OPTIONS = [
 
 function PredictionResult({ title, value }: { title: string; value: ModelPrediction }) {
   return (
-    <div className="border-b border-gray-100 pb-4 last:border-b-0 last:pb-0">
+    <div
+      className="pb-4 last:pb-0"
+      style={{ borderBottom: '1px solid var(--border-subtle)' }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-gray-500">{title}</p>
-          <p className="font-semibold text-gray-900 mt-1">{value.prediction ?? 'Unavailable'}</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{title}</p>
+          <p className="font-semibold mt-1" style={{ color: 'var(--text-primary)' }}>
+            {value.prediction ?? 'Unavailable'}
+          </p>
         </div>
-        <span className={`text-xs px-2 py-1 rounded border ${
-          value.status === 'OK'
-            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-            : value.status === 'LOW_CONFIDENCE'
-              ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-gray-50 text-gray-600 border-gray-200'
-        }`}>
+        <span
+          className="text-xs px-2.5 py-1 rounded-full font-medium"
+          style={{
+            background: value.status === 'OK'
+              ? 'rgba(16, 185, 129, 0.15)'
+              : value.status === 'LOW_CONFIDENCE'
+                ? 'rgba(245, 158, 11, 0.15)'
+                : 'rgba(100, 116, 139, 0.15)',
+            color: value.status === 'OK'
+              ? '#6ee7b7'
+              : value.status === 'LOW_CONFIDENCE'
+                ? '#fcd34d'
+                : '#94a3b8',
+            border: `1px solid ${
+              value.status === 'OK'
+                ? 'rgba(16, 185, 129, 0.3)'
+                : value.status === 'LOW_CONFIDENCE'
+                  ? 'rgba(245, 158, 11, 0.3)'
+                  : 'rgba(100, 116, 139, 0.3)'
+            }`,
+          }}
+        >
           {value.status}
         </span>
       </div>
       {Object.keys(value.probabilities).length > 0 && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-2.5">
           {Object.entries(value.probabilities).map(([label, probability]) => (
             <div key={label}>
-              <div className="flex justify-between text-xs text-gray-600 mb-1">
-                <span>{label}</span>
-                <span>{Math.round(probability * 100)}%</span>
+              <div className="flex justify-between text-xs mb-1">
+                <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+                <span style={{ color: 'var(--text-accent)' }}>{Math.round(probability * 100)}%</span>
               </div>
-              <div className="h-1.5 bg-gray-100 rounded overflow-hidden">
-                <div className="h-full bg-purple-600" style={{ width: `${probability * 100}%` }} />
+              <div
+                className="h-2 rounded-full overflow-hidden"
+                style={{ background: 'rgba(100, 116, 139, 0.15)' }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${probability * 100}%`,
+                    background: 'var(--gradient-brand)',
+                  }}
+                />
               </div>
             </div>
           ))}
         </div>
       )}
-      {value.message && <p className="text-xs text-gray-500 mt-2">{value.message}</p>}
-      <p className="text-xs text-gray-400 mt-2">
+      {value.message && (
+        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>{value.message}</p>
+      )}
+      <p className="text-xs mt-2" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>
         {value.model_name}{value.model_version ? ` · ${value.model_version}` : ''}
         {` · ${Math.round(value.completeness * 100)}% of model inputs available`}
       </p>
@@ -168,10 +199,13 @@ export function PatientDetail() {
     return (
       <DashboardShell>
         <div className="text-center py-12">
-          <p className="text-sm text-gray-500">{patientError || 'Patient not found.'}</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            {patientError || 'Patient not found.'}
+          </p>
           <button
             onClick={() => navigate('/doctor')}
-            className="mt-4 text-sm text-purple-600 hover:text-purple-700 font-medium"
+            className="mt-4 text-sm font-medium"
+            style={{ color: 'var(--text-accent)' }}
           >
             Back to patient list
           </button>
@@ -186,7 +220,10 @@ export function PatientDetail() {
         {/* Back button */}
         <button
           onClick={() => navigate('/doctor')}
-          className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+          className="text-sm font-medium transition-colors duration-200"
+          style={{ color: 'var(--text-accent)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#c4b5fd'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-accent)'; }}
         >
           &larr; Back to patient list
         </button>
@@ -196,10 +233,12 @@ export function PatientDetail() {
           <Card title="Patient record">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <h3 className="text-base font-semibold text-gray-900">{patient.name}</h3>
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {patient.name}
+                </h3>
                 <SeverityBadge value={patient.severity} />
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 Severity model: {patient.severity_prediction.status}
                 {patient.severity_prediction.probability !== null
                   ? ` · ${Math.round(patient.severity_prediction.probability * 100)}% escalated-care probability`
@@ -208,40 +247,45 @@ export function PatientDetail() {
 
               <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm">
                 <div>
-                  <span className="text-gray-500">Age</span>
-                  <p className="font-medium text-gray-900">{patient.age}</p>
+                  <span style={{ color: 'var(--text-muted)' }}>Age</span>
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{patient.age}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Gender</span>
-                  <p className="font-medium text-gray-900">{patient.gender}</p>
+                  <span style={{ color: 'var(--text-muted)' }}>Gender</span>
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{patient.gender}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Admission date</span>
-                  <p className="font-medium text-gray-900">{patient.admission_date}</p>
+                  <span style={{ color: 'var(--text-muted)' }}>Admission date</span>
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{patient.admission_date}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Collision type</span>
-                  <p className="font-medium text-gray-900">{patient.collision_type}</p>
+                  <span style={{ color: 'var(--text-muted)' }}>Collision type</span>
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{patient.collision_type}</p>
                 </div>
               </div>
 
               <div>
-                <span className="text-sm text-gray-500">Injury description</span>
-                <p className="text-sm font-medium text-gray-900 mt-1">
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Injury description</span>
+                <p className="text-sm font-medium mt-1" style={{ color: 'var(--text-primary)' }}>
                   {patient.injury_description}
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm pt-2 border-t border-gray-100">
+              <div
+                className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm pt-3"
+                style={{ borderTop: '1px solid var(--border-subtle)' }}
+              >
                 <div>
-                  <span className="text-gray-500">Priority</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Priority</span>
                   <div className="mt-1">
                     <SeverityBadge value={patient.priority} />
                   </div>
                 </div>
                 <div>
-                  <span className="text-gray-500">Predicted length of stay</span>
-                  <p className="font-medium text-gray-900">{patient.predicted_los ?? 'Unavailable'}</p>
+                  <span style={{ color: 'var(--text-muted)' }}>Predicted length of stay</span>
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {patient.predicted_los ?? 'Unavailable'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -258,7 +302,7 @@ export function PatientDetail() {
                 <PredictionResult title="Predicted stay" value={prognosis.stay_duration} />
               </div>
             ) : (
-              <p className="text-sm text-gray-500 py-4">
+              <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>
                 {prognosisError || 'Prognosis data unavailable.'}
               </p>
             )}
@@ -266,33 +310,56 @@ export function PatientDetail() {
         </div>
 
         <Card title="Record treatment data for discharge prediction">
-          <p className="mb-4 text-xs text-gray-500">
-            Fields marked <span className="font-semibold text-red-500">*</span> are required
+          <p className="mb-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Fields marked <span className="font-semibold" style={{ color: '#f87171' }}>*</span> are required
             model inputs.
           </p>
           {treatmentSaved && (
-            <p className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+            <p
+              className="mb-4 text-sm rounded-lg px-4 py-3"
+              style={{
+                color: '#6ee7b7',
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.2)',
+              }}
+            >
               Treatment saved and predictions refreshed.
             </p>
           )}
           {treatmentError && (
-            <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+            <p
+              className="mb-4 text-sm rounded-lg px-4 py-3"
+              style={{
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
               {treatmentError}
             </p>
           )}
           <form onSubmit={handleTreatmentSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label htmlFor="number_of_days_stay" className="block text-sm text-gray-600 mb-1">Days stayed <span className="text-red-500" aria-hidden="true">*</span></label>
-                <input id="number_of_days_stay" type="number" min={0} step={1} required value={treatmentForm.number_of_days_stay ?? ''}
-                  onChange={(event) => setTreatmentForm((value) => ({ ...value, number_of_days_stay: event.target.value === '' ? null : Number(event.target.value) }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded" />
+                <label htmlFor="number_of_days_stay" className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  Days stayed <span style={{ color: '#f87171' }} aria-hidden="true">*</span>
+                </label>
+                <input id="number_of_days_stay" type="number" min={0} step={1} required
+                  value={treatmentForm.number_of_days_stay ?? ''}
+                  onChange={(event) => setTreatmentForm((value) => ({
+                    ...value,
+                    number_of_days_stay: event.target.value === '' ? null : Number(event.target.value),
+                  }))}
+                  className="w-full px-4 py-2.5 text-sm dark-input"
+                />
               </div>
               <div>
-                <label htmlFor="investigation_done" className="block text-sm text-gray-600 mb-1">Investigation <span className="text-red-500" aria-hidden="true">*</span></label>
+                <label htmlFor="investigation_done" className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  Investigation <span style={{ color: '#f87171' }} aria-hidden="true">*</span>
+                </label>
                 <select id="investigation_done" required value={treatmentForm.investigation_done}
                   onChange={(event) => setTreatmentForm((value) => ({ ...value, investigation_done: event.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select investigation</option>
                   {INVESTIGATION_OPTIONS.map((option) => (
                     <option key={option} value={option}>{option}</option>
@@ -300,10 +367,12 @@ export function PatientDetail() {
                 </select>
               </div>
               <div>
-                <label htmlFor="management_name_1" className="block text-sm text-gray-600 mb-1">Primary management <span className="text-red-500" aria-hidden="true">*</span></label>
+                <label htmlFor="management_name_1" className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  Primary management <span style={{ color: '#f87171' }} aria-hidden="true">*</span>
+                </label>
                 <select id="management_name_1" required value={treatmentForm.management_name_1}
                   onChange={(event) => setTreatmentForm((value) => ({ ...value, management_name_1: event.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">Select primary management</option>
                   {PRIMARY_MANAGEMENT_OPTIONS.map((option) => (
                     <option key={option} value={option}>{option}</option>
@@ -311,10 +380,12 @@ export function PatientDetail() {
                 </select>
               </div>
               <div>
-                <label htmlFor="management_name_2" className="block text-sm text-gray-600 mb-1">Secondary management</label>
+                <label htmlFor="management_name_2" className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  Secondary management
+                </label>
                 <select id="management_name_2" value={treatmentForm.management_name_2}
                   onChange={(event) => setTreatmentForm((value) => ({ ...value, management_name_2: event.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white">
+                  className="w-full px-4 py-2.5 text-sm dark-input">
                   <option value="">No secondary management recorded</option>
                   {SECONDARY_MANAGEMENT_OPTIONS.map((option) => (
                     <option key={option} value={option}>{option}</option>
@@ -323,7 +394,7 @@ export function PatientDetail() {
               </div>
             </div>
             <button type="submit" disabled={isSavingTreatment}
-              className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded disabled:opacity-50">
+              className="px-6 py-2.5 text-sm gradient-btn">
               {isSavingTreatment ? 'Saving...' : 'Save treatment and refresh predictions'}
             </button>
           </form>

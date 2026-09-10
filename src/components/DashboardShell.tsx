@@ -23,18 +23,25 @@ export function DashboardShell({ children }: DashboardShellProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen" style={{ background: 'var(--bg-base)' }}>
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="glass-header sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Wordmark */}
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-gray-900 tracking-tight">
+              <h1 className="text-lg font-bold tracking-tight gradient-text">
                 Accident Care
               </h1>
               {user && (
-                <span className="hidden sm:inline-block px-2.5 py-0.5 text-xs font-medium rounded bg-purple-50 text-purple-700 border border-purple-200">
+                <span
+                  className="hidden sm:inline-block px-3 py-1 text-xs font-semibold rounded-full"
+                  style={{
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    color: 'var(--text-accent)',
+                    border: '1px solid rgba(139, 92, 246, 0.25)',
+                  }}
+                >
                   {ROLE_LABELS[user.role] ?? user.role}
                 </span>
               )}
@@ -44,14 +51,31 @@ export function DashboardShell({ children }: DashboardShellProps) {
             {user && (
               <div className="flex items-center gap-4">
                 <div className="hidden sm:block text-right">
-                  <p className="text-sm font-medium text-gray-700">{user.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {user.name}
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     {user.role === 'admin' && !user.hospital_id ? 'All hospitals' : user.hospital_name}
                   </p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                  className="px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    background: 'rgba(148, 163, 184, 0.08)',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(148, 163, 184, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.25)';
+                    e.currentTarget.style.color = 'var(--text-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
+                    e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                    e.currentTarget.style.color = 'var(--text-secondary)';
+                  }}
                 >
                   Log out
                 </button>
@@ -62,7 +86,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       </header>
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
         {children}
       </main>
     </div>
