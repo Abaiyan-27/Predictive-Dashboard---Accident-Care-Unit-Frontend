@@ -40,25 +40,58 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
+      style={{ background: 'var(--bg-base)' }}
+    >
+      {/* Animated gradient orbs */}
+      <div
+        className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full opacity-30 blur-3xl"
+        style={{
+          background: 'radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%)',
+          animation: 'gradientShift 8s ease-in-out infinite',
+        }}
+      />
+      <div
+        className="absolute bottom-[-20%] right-[-10%] w-[400px] h-[400px] rounded-full opacity-20 blur-3xl"
+        style={{
+          background: 'radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%)',
+          animation: 'gradientShift 10s ease-in-out infinite reverse',
+        }}
+      />
+
+      <div className="w-full max-w-md relative z-10 animate-slide-up">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight gradient-text">
             Accident Care
           </h1>
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
             Predictive hospital dashboard
           </p>
         </div>
 
         {/* Login card */}
-        <div className="bg-white border border-gray-200 rounded-lg p-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6">Sign in</h2>
+        <div
+          className="glass-card p-8"
+          style={{ cursor: 'default' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'none'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+        >
+          <h2
+            className="text-lg font-semibold mb-6"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            Sign in
+          </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium mb-1.5"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 Email
               </label>
               <input
@@ -67,13 +100,17 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-2.5 text-sm dark-input"
                 placeholder="you@accidentcare.org"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium mb-1.5"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 Password
               </label>
               <input
@@ -82,26 +119,35 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-2.5 text-sm dark-input"
                 placeholder="Enter password"
               />
             </div>
 
             {error && (
-              <p className="text-sm text-red-600">{error}</p>
+              <p
+                className="text-sm px-3 py-2 rounded-lg"
+                style={{
+                  color: '#fca5a5',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                }}
+              >
+                {error}
+              </p>
             )}
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2 px-4 text-sm font-medium text-white bg-purple-600 rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-2.5 px-4 text-sm gradient-btn"
             >
               {isSubmitting ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
         </div>
 
-        <p className="mt-5 text-xs text-center text-gray-400">
+        <p className="mt-6 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
           Sign in with an account provisioned in Accident Care.
         </p>
       </div>

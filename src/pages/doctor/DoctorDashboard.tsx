@@ -36,24 +36,43 @@ export function DoctorDashboard() {
     <DashboardShell>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Admitted patients</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-semibold gradient-text">Admitted patients</h1>
+          <span
+            className="text-sm font-medium px-3 py-1 rounded-full"
+            style={{
+              color: 'var(--text-accent)',
+              background: 'rgba(139, 92, 246, 0.1)',
+              border: '1px solid rgba(139, 92, 246, 0.2)',
+            }}
+          >
             {patients.length} patient{patients.length !== 1 ? 's' : ''}
-          </p>
+          </span>
         </div>
 
         <Card>
           {error && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            <div
+              className="mb-4 px-4 py-3 rounded-lg text-sm"
+              style={{
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
               {error}
             </div>
           )}
           {isLoading ? (
             <LoadingSpinner />
           ) : patients.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4">No patients found.</p>
+            <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>
+              No patients found.
+            </p>
           ) : (
-            <div className="border border-gray-100 rounded overflow-hidden">
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ border: '1px solid var(--border-subtle)' }}
+            >
               {patients.map((p) => (
                 <PatientListItem
                   key={p.id}

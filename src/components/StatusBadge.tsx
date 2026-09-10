@@ -1,10 +1,30 @@
 import type { TransferStatus } from '../types';
 
-const STATUS_STYLES: Record<TransferStatus, string> = {
-  pending_authorization: 'bg-amber-50 text-amber-700 border-amber-200',
-  authorized: 'bg-blue-50 text-blue-700 border-blue-200',
-  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  rejected: 'bg-red-50 text-red-700 border-red-200',
+const STATUS_STYLES: Record<TransferStatus, { bg: string; color: string; border: string; glow: string }> = {
+  pending_authorization: {
+    bg: 'rgba(245, 158, 11, 0.15)',
+    color: '#fcd34d',
+    border: 'rgba(245, 158, 11, 0.3)',
+    glow: '0 0 12px rgba(245, 158, 11, 0.15)',
+  },
+  authorized: {
+    bg: 'rgba(59, 130, 246, 0.15)',
+    color: '#93c5fd',
+    border: 'rgba(59, 130, 246, 0.3)',
+    glow: '0 0 12px rgba(59, 130, 246, 0.15)',
+  },
+  approved: {
+    bg: 'rgba(16, 185, 129, 0.15)',
+    color: '#6ee7b7',
+    border: 'rgba(16, 185, 129, 0.3)',
+    glow: '0 0 12px rgba(16, 185, 129, 0.15)',
+  },
+  rejected: {
+    bg: 'rgba(239, 68, 68, 0.15)',
+    color: '#fca5a5',
+    border: 'rgba(239, 68, 68, 0.3)',
+    glow: '0 0 12px rgba(239, 68, 68, 0.2)',
+  },
 };
 
 const STATUS_LABELS: Record<TransferStatus, string> = {
@@ -19,8 +39,18 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
+  const style = STATUS_STYLES[status];
+
   return (
-    <span className={`inline-block px-2.5 py-0.5 text-xs font-medium rounded border ${STATUS_STYLES[status]}`}>
+    <span
+      className="inline-block px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200"
+      style={{
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+        boxShadow: style.glow,
+      }}
+    >
       {STATUS_LABELS[status]}
     </span>
   );
