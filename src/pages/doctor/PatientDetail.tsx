@@ -4,9 +4,9 @@ import { DashboardShell } from '../../components/DashboardShell';
 import { Card } from '../../components/Card';
 import { SeverityBadge } from '../../components/SeverityBadge';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
-import { createTreatment, getPatientById, getPatientPrognosis } from '../../api';
+import { createTreatment, getPatientById, getPatientPrognosis, getExplanation } from '../../api';
 import { getApiErrorMessage } from '../../api/client';
-import type { ModelPrediction, Patient, Prognosis, TreatmentPayload } from '../../types';
+import type { ModelPrediction, Patient, Prognosis, TreatmentPayload, XAIExplanation } from '../../types';
 
 const INVESTIGATION_OPTIONS = [
   'x-ray',
@@ -49,7 +49,19 @@ const SECONDARY_MANAGEMENT_OPTIONS = [
   'others',
 ];
 
-function PredictionResult({ title, value }: { title: string; value: ModelPrediction }) {
+function PredictionResult({ 
+  title, 
+  value, 
+  onExplain, 
+  isExplaining, 
+  explanationData 
+}: { 
+  title: string; 
+  value: ModelPrediction;
+  onExplain?: (model: string) => void;
+  isExplaining?: boolean;
+  explanationData?: XAIExplanation | null;
+}) {
   return (
     <div
       className="pb-4 last:pb-0"
@@ -118,6 +130,56 @@ function PredictionResult({ title, value }: { title: string; value: ModelPredict
         {value.model_name}{value.model_version ? ` · ${value.model_version}` : ''}
         {` · ${Math.round(value.completeness * 100)}% of model inputs available`}
       </p>
+      
+      {['discharge', 'stay_duration', 'transfer'].includes(value.model_name) && onExplain && (
+        <div className="mt-3">
+          <button
+            onClick={() => onExplain(value.model_name)}
+            disabled={isExplaining}
+            className="text-xs px-3 py-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors border border-blue-500/20 disabled:opacity-50"
+          >
+            {isExplaining ? 'Generating Explanation...' : 'Explain AI Prediction'}
+          </button>
+        </div>
+      )}
+      
+      {explanationData && explanationData.model === value.model_name && (
+        <div className="mt-4 p-4 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-subtle)' }}>
+          <h4 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>AI Explanation</h4>
+          {explanationData.message && <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>{explanationData.message}</p>}
+          {explanationData.hinge_message && <p className="text-sm mb-4" style={{ color: 'var(--text-accent)' }}>{explanationData.hinge_message}</p>}
+          
+          {explanationData.value_of_information_ranking && explanationData.value_of_information_ranking.length > 0 && (
+            <div className="mb-4">
+              <h5 className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Missing Data Impact (Value of Information)</h5>
+              <div className="space-y-2">
+                {explanationData.value_of_information_ranking.slice(0, 3).map((item, i) => (
+                  <div key={i} className="flex justify-between items-center text-sm">
+                    <span style={{ color: 'var(--text-secondary)' }}>{item.field.replace(/_/g, ' ')}</span>
+                    <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>+{item.expected_reduction_bits.toFixed(2)} bits</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {explanationData.counterfactual_ranking && explanationData.counterfactual_ranking.length > 0 && (
+            <div>
+              <h5 className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Key Deciding Factors (Counterfactuals)</h5>
+              <div className="space-y-2">
+                {explanationData.counterfactual_ranking.slice(0, 3).map((item, i) => (
+                  <div key={i} className="flex justify-between items-center text-sm">
+                    <span style={{ color: 'var(--text-secondary)' }}>{item.field.replace(/_/g, ' ')}</span>
+                    <span className="font-mono text-xs" style={{ color: item.any_flip ? '#f87171' : 'var(--text-muted)' }}>
+                      {item.any_flip ? 'Critical Factor' : 'Secondary Factor'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -129,6 +191,8 @@ export function PatientDetail() {
   const [prognosis, setPrognosis] = useState<Prognosis | null>(null);
   const [isLoadingPatient, setIsLoadingPatient] = useState(true);
   const [isLoadingPrognosis, setIsLoadingPrognosis] = useState(true);
+  const [explainingModel, setExplainingModel] = useState<string | null>(null);
+  const [explanationData, setExplanationData] = useState<XAIExplanation | null>(null);
   const [patientError, setPatientError] = useState('');
   const [prognosisError, setPrognosisError] = useState('');
   const [treatmentError, setTreatmentError] = useState('');
@@ -165,6 +229,19 @@ export function PatientDetail() {
       })
       .finally(() => setIsLoadingPrognosis(false));
   }, [id]);
+
+  const handleExplain = async (modelName: string) => {
+    if (!patient?.accident_id) return;
+    try {
+      setExplainingModel(modelName);
+      const data = await getExplanation(modelName, patient.accident_id);
+      setExplanationData(data);
+    } catch (err) {
+      alert(getApiErrorMessage(err, 'Failed to fetch explanation.'));
+    } finally {
+      setExplainingModel(null);
+    }
+  };
 
   const handleTreatmentSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -297,9 +374,9 @@ export function PatientDetail() {
               <LoadingSpinner />
             ) : prognosis ? (
               <div className="space-y-4">
-                <PredictionResult title="Discharge outcome" value={prognosis.discharge} />
-                <PredictionResult title="Transfer assessment" value={prognosis.transfer} />
-                <PredictionResult title="Predicted stay" value={prognosis.stay_duration} />
+                <PredictionResult title="Discharge outcome" value={prognosis.discharge} onExplain={handleExplain} isExplaining={explainingModel === prognosis.discharge.model_name} explanationData={explanationData} />
+                <PredictionResult title="Transfer assessment" value={prognosis.transfer} onExplain={handleExplain} isExplaining={explainingModel === prognosis.transfer.model_name} explanationData={explanationData} />
+                <PredictionResult title="Predicted stay" value={prognosis.stay_duration} onExplain={handleExplain} isExplaining={explainingModel === prognosis.stay_duration.model_name} explanationData={explanationData} />
               </div>
             ) : (
               <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>
