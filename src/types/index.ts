@@ -44,6 +44,28 @@ export interface ModelPrediction {
   message: string | null;
 }
 
+// ── Explainability (XAI) ────────────────────────────────────────────────────
+
+export interface XAIVOIRecord {
+  field: string;
+  expected_reduction_bits: number;
+}
+
+export interface XAICounterfactualRecord {
+  field: string;
+  max_confidence_shift: number;
+  any_flip: boolean;
+}
+
+export interface XAIExplanation {
+  model: string;
+  uncertainty_type: 'epistemic' | 'aleatoric' | 'not_applicable_fully_specified';
+  message?: string;
+  hinge_message?: string;
+  value_of_information_ranking?: XAIVOIRecord[];
+  counterfactual_ranking?: XAICounterfactualRecord[];
+}
+
 // ── Patient ─────────────────────────────────────────────────────────────────
 
 export interface Patient {

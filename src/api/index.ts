@@ -19,6 +19,7 @@ import type {
   TreatmentPayload,
   ModelPrediction,
   User,
+  XAIExplanation,
 } from '../types';
 
 interface BackendUser {
@@ -350,6 +351,19 @@ export async function createTreatment(payload: TreatmentPayload): Promise<void> 
     management_name_1: payload.management_name_1 || null,
     management_name_2: payload.management_name_2 || null,
   });
+}
+
+// ── Explainability ──────────────────────────────────────────────────────────
+
+export async function getExplanation(
+  modelName: string,
+  accidentId: string,
+): Promise<XAIExplanation> {
+  const { data } = await apiClient.post<XAIExplanation>('/xai/explain', {
+    model_name: modelName,
+    accident_id: accidentId,
+  });
+  return data;
 }
 
 // ── Admin ───────────────────────────────────────────────────────────────────
