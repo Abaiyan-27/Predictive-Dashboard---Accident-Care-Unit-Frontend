@@ -4,6 +4,7 @@ import apiClient from './client';
 import type {
   AccidentTrend,
   AccidentForecast,
+  AssociationRulesResponse,
   AuditLog,
   AuthResponse,
   CreateUserPayload,
@@ -438,6 +439,20 @@ export async function getHistoricalAccidentTrends(): Promise<AccidentTrend[]> {
 export async function getAccidentForecast(horizon = 6): Promise<AccidentForecast> {
   const { data } = await apiClient.get<AccidentForecast>(
     `/government/accident-forecast?horizon=${horizon}`,
+  );
+  return data;
+}
+
+export async function getAssociationRules(
+  options: { consequent?: string; limit?: number; sortBy?: string } = {},
+): Promise<AssociationRulesResponse> {
+  const params = new URLSearchParams();
+  if (options.consequent) params.set('consequent', options.consequent);
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  if (options.sortBy) params.set('sort_by', options.sortBy);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const { data } = await apiClient.get<AssociationRulesResponse>(
+    `/government/association-rules${qs}`,
   );
   return data;
 }

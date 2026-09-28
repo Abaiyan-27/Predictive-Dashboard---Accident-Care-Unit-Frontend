@@ -203,6 +203,22 @@ export interface AccidentForecast {
   } | null;
 }
 
+export interface AssociationRule {
+  antecedents: string[];
+  consequents: string[];
+  support: number;
+  confidence: number;
+  lift: number;
+}
+
+export interface AssociationRulesResponse {
+  status: string;
+  total_rules: number;
+  thresholds: Record<string, number>;
+  rules: AssociationRule[];
+  message: string | null;
+}
+
 // ── User creation ───────────────────────────────────────────────────────────
 
 export interface CreateUserPayload {
