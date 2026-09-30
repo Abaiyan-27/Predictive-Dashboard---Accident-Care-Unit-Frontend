@@ -251,9 +251,9 @@ export function PatientDetail() {
       accident_id: patient.accident_id,
       hospital_id: patient.hospital_id,
       number_of_days_stay: treatmentForm.number_of_days_stay,
-      investigation_done: treatmentForm.investigation_done || undefined,
-      management_name_1: treatmentForm.management_name_1 || undefined,
-      management_name_2: treatmentForm.management_name_2 || undefined,
+      investigation_done: treatmentForm.investigation_done,
+      management_name_1: treatmentForm.management_name_1,
+      management_name_2: treatmentForm.management_name_2,
     };
 
     try {

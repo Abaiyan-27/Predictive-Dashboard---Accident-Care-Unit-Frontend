@@ -84,7 +84,7 @@ export function NurseDashboard() {
     setErrorMsg('');
     try {
       // Fetch full details to populate form
-      const detail = await getPatientDetail(patientItem.hospital_id || user.hospital_id, patientItem.id);
+      const detail = await getPatientDetail(patientItem.id);
       const acc = detail.accident;
       const inj1 = detail.injuries?.[0] || {};
       const inj2 = detail.injuries?.[1] || {};

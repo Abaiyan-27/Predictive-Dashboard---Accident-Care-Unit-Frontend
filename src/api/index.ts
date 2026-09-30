@@ -67,6 +67,17 @@ interface BackendAccident {
   severity_prediction?: BackendSeverityPrediction | null;
   stay_duration_prediction?: BackendSeverityPrediction | null;
   transfer_prediction?: BackendSeverityPrediction | null;
+  mode_of_transport?: string | null;
+  incident_at?: string | null;
+  helmet_worn?: string | null;
+  road_condition?: string | null;
+  visibility?: string | null;
+  road_signals_exist?: string | null;
+  alcohol_consumption?: string | null;
+  illicit_drugs?: string | null;
+  mode_of_travel_during_accident?: string | null;
+  passenger_type?: string | null;
+  other_injury?: string | null;
 }
 
 interface BackendSeverityPrediction {
@@ -214,7 +225,7 @@ function toPatient(
     collision_type: accident.collision_with ?? accident.vehicle_type ?? 'Unknown',
     injury_description: injurySummary(injuries),
     severity,
-    priority: severity === 'Critical' ? 'High' : severity === 'Minor' ? 'Low' : severity ? 'Medium' : null,
+    priority: severity === 'High' ? 'High' : severity === 'Severity not classified' ? 'Low' : severity ? 'Medium' : null,
     predicted_los: stayDurationPrediction.prediction,
     severity_prediction: severityPrediction,
     stay_duration_prediction: stayDurationPrediction,
@@ -391,7 +402,7 @@ export async function getPatientById(patientId: string): Promise<Patient | undef
   return toPatient(latest, data);
 }
 
-export async function getPatientDetail(hospitalId: string, patientId: string): Promise<{ patient: BackendPatient, accident: BackendAccident, injuries: BackendInjury[] }> {
+export async function getPatientDetail(patientId: string): Promise<{ patient: BackendPatient, accident: BackendAccident, injuries: BackendInjury[] }> {
   const { data } = await apiClient.get<BackendPatient>(`/patients/${patientId}`);
   const accidents = data.accident_records ?? [];
   const latest = [...accidents].sort((left, right) =>
