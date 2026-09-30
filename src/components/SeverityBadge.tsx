@@ -3,12 +3,6 @@ import type { Severity, Priority } from '../types';
 type BadgeValue = Severity | Priority;
 
 const BADGE_STYLES: Record<BadgeValue, { bg: string; color: string; border: string; glow: string }> = {
-  Critical: {
-    bg: 'rgba(239, 68, 68, 0.15)',
-    color: '#fca5a5',
-    border: 'rgba(239, 68, 68, 0.3)',
-    glow: '0 0 12px rgba(239, 68, 68, 0.2)',
-  },
   High: {
     bg: 'rgba(239, 68, 68, 0.15)',
     color: '#fca5a5',
@@ -27,17 +21,17 @@ const BADGE_STYLES: Record<BadgeValue, { bg: string; color: string; border: stri
     border: 'rgba(245, 158, 11, 0.3)',
     glow: '0 0 12px rgba(245, 158, 11, 0.15)',
   },
-  Minor: {
-    bg: 'rgba(16, 185, 129, 0.15)',
-    color: '#6ee7b7',
-    border: 'rgba(16, 185, 129, 0.3)',
-    glow: '0 0 12px rgba(16, 185, 129, 0.15)',
-  },
   Low: {
     bg: 'rgba(16, 185, 129, 0.15)',
     color: '#6ee7b7',
     border: 'rgba(16, 185, 129, 0.3)',
     glow: '0 0 12px rgba(16, 185, 129, 0.15)',
+  },
+  'Severity not classified': {
+    bg: 'rgba(100, 116, 139, 0.15)',
+    color: '#94a3b8',
+    border: 'rgba(100, 116, 139, 0.3)',
+    glow: 'none',
   },
 };
 
@@ -65,7 +59,7 @@ export function SeverityBadge({ value }: SeverityBadgeProps) {
         boxShadow: style.glow,
       }}
     >
-      {value ?? 'Unavailable'}
+      {value ?? 'Severity not classified'}
     </span>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardShell } from '../../components/DashboardShell';
 import { Card } from '../../components/Card';
 import { SeverityBadge } from '../../components/SeverityBadge';
@@ -50,6 +51,7 @@ const thStyle = {
 
 export function AdminDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AdminTab>('status');
 
   // Hospital status state
@@ -313,7 +315,8 @@ export function AdminDashboard() {
                   {patients.map((p) => (
                     <tr
                       key={p.id}
-                      className="dark-table-row"
+                      onClick={() => navigate(`/patient/${p.id}`)}
+                      className="dark-table-row hover:bg-white/5 cursor-pointer"
                       style={{ borderBottom: '1px solid var(--border-subtle)' }}
                     >
                       <td className="py-3 px-4 font-medium" style={{ color: 'var(--text-primary)' }}>{p.name}</td>

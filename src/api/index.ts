@@ -150,10 +150,10 @@ function normalizeGender(value: string | null | undefined): Patient['gender'] {
 
 function normalizeSeverity(value: string | null | undefined): Severity | null {
   const normalized = value?.toLowerCase();
-  if (normalized === 'severe' || normalized === 'critical' || normalized === 'high') return 'Critical';
-  if (normalized === 'minor' || normalized === 'mild' || normalized === 'low') return 'Minor';
+  if (normalized === 'severe' || normalized === 'critical' || normalized === 'high') return 'High';
   if (normalized === 'moderate' || normalized === 'borderline') return 'Moderate';
-  return null;
+  // "Severity not classified" covers low/minor and missing
+  return 'Severity not classified';
 }
 
 function toPrediction(
@@ -224,12 +224,7 @@ function toPatient(
   };
 }
 
-function ageBucket(age: number): string {
-  const normalized = Math.max(1, Math.min(100, Math.trunc(age)));
-  if (normalized <= 9) return '1-9';
-  const lower = Math.min(Math.floor(normalized / 10) * 10, 90);
-  return `${lower}-${lower === 90 ? 100 : lower + 9}`;
-}
+// Age bucketing is now handled on the backend.
 
 function normalizeTransferStatus(status: string | null): TransferStatus {
   if (
@@ -260,7 +255,7 @@ export async function submitPatientIntake(
 ): Promise<Patient> {
   const { data } = await apiClient.post<BackendIntakeResponse>('/patients/intake', {
     full_name: form.name,
-    age: form.age === null ? null : ageBucket(form.age),
+    age: form.age === null ? null : form.age.toString(),
     gender: form.gender || null,
     hospital_id: hospitalId || null,
     first_hospital_id: hospitalId || null,
@@ -278,21 +273,86 @@ export async function submitPatientIntake(
     collision_force_from: form.collision_force_from || null,
     alcohol_consumption: form.alcohol_consumption || null,
     illicit_drugs: form.illicit_drugs || null,
+    // Severity model raw inputs
+    mode_of_travel_during_accident: form.mode_of_travel_during_accident || null,
+    passenger_type: form.passenger_type || null,
+    other_injury: form.other_injury || null,
     injuries: [
-      ...(form.site_of_injury || form.injury_description
+      ...(form.site_of_injury || form.type_of_injury
         ? [{
             site_of_injury: form.site_of_injury || null,
-            type_of_injury: form.injury_description || null,
+            type_of_injury: form.type_of_injury || null,
           }]
         : []),
-      ...(form.secondary_site_of_injury || form.secondary_injury_description
+      ...(form.secondary_site_of_injury || form.secondary_type_of_injury
         ? [{
             site_of_injury: form.secondary_site_of_injury || null,
-            type_of_injury: form.secondary_injury_description || null,
+            type_of_injury: form.secondary_type_of_injury || null,
           }]
         : []),
     ],
   });
+
+  return toPatient(
+    {
+      ...data.accident_record,
+      Injury_Description: data.injuries,
+      severity_prediction: data.severity_prediction,
+      stay_duration_prediction: data.stay_duration_prediction,
+      transfer_prediction: data.transfer_prediction,
+    },
+    data.patient,
+    data.severity_prediction.prediction,
+  );
+}
+
+export async function updatePatientIntake(
+  accidentId: string,
+  form: Partial<PatientIntakeForm>,
+  hospitalId: string,
+): Promise<Patient> {
+  const payload: any = {
+    full_name: form.name || undefined,
+    age: form.age === null ? null : (form.age !== undefined ? form.age.toString() : undefined),
+    gender: form.gender !== undefined ? (form.gender || null) : undefined,
+    hospital_id: hospitalId || null,
+    mode_of_transport: form.mode_of_transport !== undefined ? (form.mode_of_transport || null) : undefined,
+    time_to_hospital: form.time_to_hospital !== undefined ? (form.time_to_hospital || null) : undefined,
+    collision_with: form.collision_type !== undefined ? (form.collision_type || null) : undefined,
+    incident_at: form.incident_at !== undefined ? (form.incident_at || null) : undefined,
+    vehicle_type: form.vehicle_type !== undefined ? (form.vehicle_type || null) : undefined,
+    helmet_worn: form.helmet_worn !== undefined ? (form.helmet_worn || null) : undefined,
+    road_type: form.road_type !== undefined ? (form.road_type || null) : undefined,
+    speed: form.speed !== undefined ? (form.speed || null) : undefined,
+    road_condition: form.road_condition !== undefined ? (form.road_condition || null) : undefined,
+    visibility: form.visibility !== undefined ? (form.visibility || null) : undefined,
+    road_signals_exist: form.road_signals_exist !== undefined ? (form.road_signals_exist || null) : undefined,
+    collision_force_from: form.collision_force_from !== undefined ? (form.collision_force_from || null) : undefined,
+    alcohol_consumption: form.alcohol_consumption !== undefined ? (form.alcohol_consumption || null) : undefined,
+    illicit_drugs: form.illicit_drugs !== undefined ? (form.illicit_drugs || null) : undefined,
+    mode_of_travel_during_accident: form.mode_of_travel_during_accident !== undefined ? (form.mode_of_travel_during_accident || null) : undefined,
+    passenger_type: form.passenger_type !== undefined ? (form.passenger_type || null) : undefined,
+    other_injury: form.other_injury !== undefined ? (form.other_injury || null) : undefined,
+  };
+
+  if (form.site_of_injury !== undefined || form.type_of_injury !== undefined || form.secondary_site_of_injury !== undefined || form.secondary_type_of_injury !== undefined) {
+    payload.injuries = [
+      ...(form.site_of_injury || form.type_of_injury
+        ? [{
+            site_of_injury: form.site_of_injury || null,
+            type_of_injury: form.type_of_injury || null,
+          }]
+        : []),
+      ...(form.secondary_site_of_injury || form.secondary_type_of_injury
+        ? [{
+            site_of_injury: form.secondary_site_of_injury || null,
+            type_of_injury: form.secondary_type_of_injury || null,
+          }]
+        : []),
+    ];
+  }
+
+  const { data } = await apiClient.patch<BackendIntakeResponse>(`/patients/intake/${accidentId}`, payload);
 
   return toPatient(
     {
@@ -329,6 +389,20 @@ export async function getPatientById(patientId: string): Promise<Patient | undef
   )[0];
   if (!latest) return undefined;
   return toPatient(latest, data);
+}
+
+export async function getPatientDetail(hospitalId: string, patientId: string): Promise<{ patient: BackendPatient, accident: BackendAccident, injuries: BackendInjury[] }> {
+  const { data } = await apiClient.get<BackendPatient>(`/patients/${patientId}`);
+  const accidents = data.accident_records ?? [];
+  const latest = [...accidents].sort((left, right) =>
+    (right.created_at ?? '').localeCompare(left.created_at ?? ''),
+  )[0];
+  if (!latest) throw new Error("No accident record found");
+  return {
+    patient: data,
+    accident: latest,
+    injuries: latest.Injury_Description as BackendInjury[] ?? []
+  };
 }
 
 export async function getPatientPrognosis(patientId: string): Promise<Prognosis> {

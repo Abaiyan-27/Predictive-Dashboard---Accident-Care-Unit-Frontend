@@ -29,7 +29,7 @@ export function DoctorDashboard() {
   }, [user]);
 
   const handlePatientClick = (patientId: string) => {
-    navigate(`/doctor/patient/${patientId}`);
+    navigate(`/patient/${patientId}`);
   };
 
   return (

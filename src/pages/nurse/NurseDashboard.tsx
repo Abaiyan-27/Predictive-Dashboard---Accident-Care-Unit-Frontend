@@ -5,102 +5,63 @@ import { PatientListItem } from '../../components/PatientListItem';
 import { SeverityBadge } from '../../components/SeverityBadge';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { useAuth } from '../../auth/AuthContext';
-import { submitPatientIntake, getMyPatients } from '../../api';
+import { submitPatientIntake, updatePatientIntake, getMyPatients, getPatientDetail } from '../../api';
 import { getApiErrorMessage } from '../../api/client';
 import type { Patient, PatientIntakeForm } from '../../types';
 
-const COLLISION_TYPES = [
-  'fall from vehicle',
-  'motorbike',
-  'animal',
-  'three wheeler',
-  'car or van',
-  'heavy vehicle',
-  'bicycle',
-  'fixed object',
-  'pedestrian',
-  'others',
-];
+// ── Dropdown Options ────────────────────────────────────────────────────────
 
+const COLLISION_TYPES = ['ambulance', 'animal', 'bicycle', 'car or van', 'fall from vehicle', 'fixed object', 'heavy vehicle', 'motorbike', 'others', 'pedestrian', 'slipped', 'three wheeler', 'train'];
 const TRANSPORT_MODES = ['ambulance', 'motor bike', 'three wheeler', 'other vehicle'];
-
-const TRAVEL_TIMES = [
-  'less than 15 minutes',
-  '15 minutes - 30 minutes',
-  '30 minutes - 1 hour',
-  '1 hour - 2 hour',
-  'more than 2 hour',
-];
-
-const INJURY_SITES = [
-  'head injury',
-  'facial injury',
-  'chest injury',
-  'shoulder injury',
-  'forearm',
-  'hand',
-  'knee',
-  'leg',
-  'foot',
-  'other',
-];
-
-const VEHICLE_TYPES = ['motorcycle', 'car', 'van', 'three wheeler', 'bus', 'lorry', 'bicycle', 'other'];
+const TRAVEL_TIMES = ['less than 15 minutes', '15 minutes - 30 minutes', '30 minutes - 1 hour', '1 hour - 2 hour', 'more than 2 hour'];
+const INJURY_SITES = ['abdomen', 'cervical', 'chest injury', 'chest rib', 'clavicle', 'elbow region', 'eye injury', 'facial injury', 'femur', 'foot', 'foot metacarpals', 'foot metatarsals', 'foot phalanges', 'foot tarsals', 'forearm', 'forearm (radius, ulna)', 'forearm radius', 'forearm ulna', 'forehead', 'hand', 'hand metacarpals', 'hand phalanges', 'head injury', 'humerus head', 'humerus region', 'knee', 'knee patella', 'leg', 'leg (tibia, fibula)', 'leg fibula', 'leg tibia', 'lumbar', 'no injury found', 'pelvis', 'pelvis ilium', 'pelvis ramous', 'sacrum', 'shoulder clavicle', 'shoulder injury', 'thigh', 'thigh femur', 'thigh nof', 'thoracic'];
+const SECONDARY_INJURY_SITES = ['no secondary injury found', ...INJURY_SITES.filter((s) => s !== 'no injury found')];
+const INJURY_TYPES = ['abration', 'amputation', 'bowel injury', 'contusion', 'dislocation', 'fracture', 'ich', 'kidney injury', 'laceration', 'ligament injury', 'lung injury', 'nerve lesion', 'pericardial effusion', 'pneumothorax', 'sdh', 'spinal cord injury', 'spleen injury'];
+const SECONDARY_INJURY_TYPES = ['abration', 'amputation', 'bowel injury', 'contusion', 'dislocation', 'fracture', 'kidney injury', 'laceration', 'ligament injury', 'nerve lesion', 'pneumothorax', 'spleen injury'];
+const MODE_OF_TRAVEL = ['bicycle', 'bicycle pillion', 'car or van', 'car or van passenger', 'heavy vehicle', 'heavy vehicle passenger', 'motor cyclist', 'motorbike pillion rider', 'others', 'pedestrian', 'three wheeler', 'three wheeler passenger'];
+const VEHICLE_TYPES = ['motor cyclist', 'other vehicle'];
+const PASSENGER_TYPES = ['driver', 'frontseatpassenger', 'passengerenteringorleavingbus', 'passengerfallingofvehicle', 'rearseatpassenger'];
+const OTHER_INJURY_OPTIONS = ['multiple', 'no other injury'];
 const ROAD_TYPES = ['straight', 'bend', 'junction'];
 const SPEEDS = ['less than 40 km/h', '40 - 80 km/h', '80 - 100 km/h', 'more than 100 km/h'];
 const COLLISION_FORCES = ['front', 'behind', 'leftside', 'rightside'];
+const ROAD_CONDITIONS = ['good', 'poor'];
 const YES_NO = ['yes', 'no'];
-
 const GENDERS = ['Male', 'Female', 'Other'] as const;
 
 const EMPTY_FORM: PatientIntakeForm = {
-  name: '',
-  age: null,
-  gender: '',
-  collision_type: '',
-  mode_of_transport: '',
-  time_to_hospital: '',
-  site_of_injury: '',
-  secondary_site_of_injury: '',
-  secondary_injury_description: '',
-  injury_description: '',
-  incident_at: '',
-  vehicle_type: '',
-  helmet_worn: '',
-  road_type: '',
-  speed: '',
-  road_condition: '',
-  visibility: '',
-  road_signals_exist: '',
-  collision_force_from: '',
-  alcohol_consumption: '',
-  illicit_drugs: '',
+  name: '', age: null, gender: '', collision_type: '', mode_of_transport: '', time_to_hospital: '',
+  site_of_injury: '', type_of_injury: '', secondary_site_of_injury: '', secondary_type_of_injury: '',
+  incident_at: '', vehicle_type: '', helmet_worn: '', road_type: '', speed: '', road_condition: '',
+  visibility: '', road_signals_exist: '', collision_force_from: '', alcohol_consumption: '', illicit_drugs: '',
+  mode_of_travel_during_accident: '', passenger_type: '', other_injury: '',
 };
 
-/* Dark-themed label helper */
 const labelClass = "block text-sm font-medium mb-1.5";
 const labelStyle = { color: 'var(--text-secondary)' };
-const requiredStar = <span style={{ color: '#f87171' }} aria-hidden="true">*</span>;
 
 export function NurseDashboard() {
   const { user } = useAuth();
   const [form, setForm] = useState<PatientIntakeForm>({ ...EMPTY_FORM });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeAccidentId, setActiveAccidentId] = useState<string | null>(null);
+  
+  const [isSubmittingBasic, setIsSubmittingBasic] = useState(false);
+  const [isSubmittingSeverity, setIsSubmittingSeverity] = useState(false);
+  const [isSubmittingOther, setIsSubmittingOther] = useState(false);
+  
   const [resultPatient, setResultPatient] = useState<Patient | null>(null);
   const [myPatients, setMyPatients] = useState<Patient[]>([]);
   const [isLoadingPatients, setIsLoadingPatients] = useState(true);
-  const [patientsError, setPatientsError] = useState('');
-  const [submitError, setSubmitError] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const fetchMyPatients = useCallback(async () => {
     if (!user) return;
     setIsLoadingPatients(true);
-    setPatientsError('');
     try {
       const data = await getMyPatients();
       setMyPatients(data);
     } catch (error) {
-      setPatientsError(getApiErrorMessage(error, 'Unable to load patient records.'));
+      setErrorMsg(getApiErrorMessage(error, 'Unable to load patient records.'));
     } finally {
       setIsLoadingPatients(false);
     }
@@ -110,9 +71,7 @@ export function NurseDashboard() {
     fetchMyPatients();
   }, [fetchMyPatients]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setForm((prev) => ({
       ...prev,
@@ -120,342 +79,362 @@ export function NurseDashboard() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePatientSelect = async (patientItem: Patient) => {
     if (!user) return;
-
-    setIsSubmitting(true);
-    setResultPatient(null);
-    setSubmitError('');
-
+    setErrorMsg('');
     try {
-      const patient = await submitPatientIntake(form, user.hospital_id);
-      setResultPatient(patient);
-      setForm({ ...EMPTY_FORM });
-      // Refresh the patient list
-      await fetchMyPatients();
+      // Fetch full details to populate form
+      const detail = await getPatientDetail(patientItem.hospital_id || user.hospital_id, patientItem.id);
+      const acc = detail.accident;
+      const inj1 = detail.injuries?.[0] || {};
+      const inj2 = detail.injuries?.[1] || {};
+      
+      setActiveAccidentId(acc.accident_id);
+      setForm({
+        name: detail.patient.full_name || '',
+        age: detail.patient.age ? parseInt(detail.patient.age, 10) : null,
+        gender: detail.patient.gender as any || '',
+        collision_type: acc.collision_with || '',
+        mode_of_transport: acc.mode_of_transport || '',
+        time_to_hospital: acc.time_to_hospital || '',
+        site_of_injury: inj1.site_of_injury || '',
+        type_of_injury: inj1.type_of_injury || '',
+        secondary_site_of_injury: inj2.site_of_injury || '',
+        secondary_type_of_injury: inj2.type_of_injury || '',
+        incident_at: acc.incident_at ? acc.incident_at.slice(0, 16) : '', // datetime-local format
+        vehicle_type: acc.vehicle_type || '',
+        helmet_worn: acc.helmet_worn || '',
+        road_type: acc.road_type || '',
+        speed: acc.speed || '',
+        road_condition: acc.road_condition || '',
+        visibility: acc.visibility || '',
+        road_signals_exist: acc.road_signals_exist || '',
+        collision_force_from: acc.collision_force_from || '',
+        alcohol_consumption: acc.alcohol_consumption || '',
+        illicit_drugs: acc.illicit_drugs || '',
+        mode_of_travel_during_accident: acc.mode_of_travel_during_accident || '',
+        passenger_type: acc.passenger_type || '',
+        other_injury: acc.other_injury || '',
+      });
+      setResultPatient(patientItem);
     } catch (error) {
-      setSubmitError(getApiErrorMessage(error, 'Unable to submit patient intake.'));
-    } finally {
-      setIsSubmitting(false);
+      setErrorMsg(getApiErrorMessage(error, 'Failed to load patient details.'));
     }
   };
 
-  const dismissResult = () => {
+  const handleNewPatient = () => {
+    setActiveAccidentId(null);
+    setForm({ ...EMPTY_FORM });
     setResultPatient(null);
+    setErrorMsg('');
+  };
+
+  const submitBasicDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setIsSubmittingBasic(true);
+    setErrorMsg('');
+    try {
+      if (activeAccidentId) {
+        const patient = await updatePatientIntake(activeAccidentId, { name: form.name, age: form.age, gender: form.gender }, user.hospital_id);
+        setResultPatient(patient);
+      } else {
+        const patient = await submitPatientIntake({ name: form.name, age: form.age, gender: form.gender } as PatientIntakeForm, user.hospital_id);
+        setActiveAccidentId(patient.accident_id);
+        setResultPatient(patient);
+      }
+      await fetchMyPatients();
+    } catch (error) {
+      setErrorMsg(getApiErrorMessage(error, 'Unable to save basic details.'));
+    } finally {
+      setIsSubmittingBasic(false);
+    }
+  };
+
+  const submitSeverityInputs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !activeAccidentId) return;
+    setIsSubmittingSeverity(true);
+    setErrorMsg('');
+    try {
+      const patient = await updatePatientIntake(activeAccidentId, {
+        collision_type: form.collision_type, mode_of_travel_during_accident: form.mode_of_travel_during_accident,
+        passenger_type: form.passenger_type, mode_of_transport: form.mode_of_transport, time_to_hospital: form.time_to_hospital,
+        site_of_injury: form.site_of_injury, type_of_injury: form.type_of_injury,
+        secondary_site_of_injury: form.secondary_site_of_injury, secondary_type_of_injury: form.secondary_type_of_injury,
+        other_injury: form.other_injury,
+        incident_at: form.incident_at, vehicle_type: form.vehicle_type, helmet_worn: form.helmet_worn
+      }, user.hospital_id);
+      setResultPatient(patient);
+      await fetchMyPatients();
+    } catch (error) {
+      setErrorMsg(getApiErrorMessage(error, 'Unable to save severity inputs.'));
+    } finally {
+      setIsSubmittingSeverity(false);
+    }
+  };
+
+  const submitOtherInputs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !activeAccidentId) return;
+    setIsSubmittingOther(true);
+    setErrorMsg('');
+    try {
+      const patient = await updatePatientIntake(activeAccidentId, {
+        road_type: form.road_type, speed: form.speed, road_condition: form.road_condition, visibility: form.visibility,
+        road_signals_exist: form.road_signals_exist, collision_force_from: form.collision_force_from,
+        alcohol_consumption: form.alcohol_consumption, illicit_drugs: form.illicit_drugs
+      }, user.hospital_id);
+      setResultPatient(patient);
+      await fetchMyPatients();
+    } catch (error) {
+      setErrorMsg(getApiErrorMessage(error, 'Unable to save other inputs.'));
+    } finally {
+      setIsSubmittingOther(false);
+    }
   };
 
   return (
     <DashboardShell>
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold gradient-text">Patient intake</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-xl font-semibold gradient-text">Patient intake</h1>
+          {activeAccidentId && (
+            <button onClick={handleNewPatient} className="px-4 py-2 text-sm gradient-btn">
+              + New Patient
+            </button>
+          )}
+        </div>
 
-        {/* Severity result banner */}
-        {resultPatient && (
-          <div
-            className="glass-card p-6"
-            style={{
-              borderColor: 'rgba(16, 185, 129, 0.3)',
-              boxShadow: '0 0 20px rgba(16, 185, 129, 0.1)',
-              cursor: 'default',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'none'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-sm font-semibold mb-1" style={{ color: '#6ee7b7' }}>
-                  Severity assessment complete
-                </h3>
-                <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
-                  Patient <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{resultPatient.name}</span> has been assessed.
-                </p>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Patient severity score:</span>
-                  <SeverityBadge value={resultPatient.severity} />
-                </div>
-                <div className="mt-3 space-y-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <p>
-                    Predicted stay:{' '}
-                    {resultPatient.predicted_los
-                      ?? 'Awaiting investigation and management details from the doctor'}
-                  </p>
-                  <p>
-                    Transfer probability:{' '}
-                    {resultPatient.transfer_prediction.probabilities.Transfer !== undefined
-                      ? `${Math.round(resultPatient.transfer_prediction.probabilities.Transfer * 100)}%`
-                      : 'Unavailable'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={dismissResult}
-                className="text-sm transition-colors duration-200"
-                style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
-              >
-                Dismiss
-              </button>
+        {errorMsg && (
+          <div className="mb-4 px-4 py-3 rounded-lg text-sm" style={{ color: '#fca5a5', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Severity result banner (Nurse only sees Severity) */}
+        {resultPatient && resultPatient.severity && resultPatient.severity !== 'Severity not classified' && (
+          <div className="glass-card p-6 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
+            <h3 className="text-sm font-semibold mb-1 text-emerald-400">Severity assessment complete</h3>
+            <p className="text-sm mb-3 text-slate-400">
+              Patient <span className="font-medium text-slate-200">{resultPatient.name}</span> has been assessed.
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-400">Patient severity score:</span>
+              <SeverityBadge value={resultPatient.severity} />
             </div>
           </div>
         )}
 
-        {/* Intake form */}
-        <Card title="New patient record">
-          {submitError && (
-            <div
-              className="mb-4 px-4 py-3 rounded-lg text-sm"
-              style={{
-                color: '#fca5a5',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
-              }}
-            >
-              {submitError}
-            </div>
+        {/* Intake Forms */}
+        <div className="space-y-6">
+          
+          <Card title="Box 1: Basic Details">
+            <form onSubmit={submitBasicDetails} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="name" className={labelClass} style={labelStyle}>Patient name</label>
+                  <input id="name" name="name" type="text" required value={form.name} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input" />
+                </div>
+                <div>
+                  <label htmlFor="age" className={labelClass} style={labelStyle}>Age</label>
+                  <input id="age" name="age" type="number" min={1} max={100} value={form.age ?? ''} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input" />
+                </div>
+                <div>
+                  <label htmlFor="gender" className={labelClass} style={labelStyle}>Gender</label>
+                  <select id="gender" name="gender" value={form.gender} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                    <option value="">Not provided</option>
+                    {GENDERS.map((g) => (<option key={g} value={g}>{g}</option>))}
+                  </select>
+                </div>
+              </div>
+              <button type="submit" disabled={isSubmittingBasic} className="py-2.5 px-6 text-sm gradient-btn">
+                {isSubmittingBasic ? 'Saving...' : 'Save Basic Details'}
+              </button>
+            </form>
+          </Card>
+
+          {activeAccidentId && (
+            <Card title="Box 2: Severity Prediction Inputs">
+              <form onSubmit={submitSeverityInputs} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="collision_type" className={labelClass} style={labelStyle}>Collision with</label>
+                    <select id="collision_type" name="collision_type" value={form.collision_type} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Select type</option>
+                      {COLLISION_TYPES.map((ct) => (<option key={ct} value={ct}>{ct}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="mode_of_travel_during_accident" className={labelClass} style={labelStyle}>Mode of travel</label>
+                    <select id="mode_of_travel_during_accident" name="mode_of_travel_during_accident" value={form.mode_of_travel_during_accident} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {MODE_OF_TRAVEL.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="passenger_type" className={labelClass} style={labelStyle}>Passenger type</label>
+                    <select id="passenger_type" name="passenger_type" value={form.passenger_type} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {PASSENGER_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="mode_of_transport" className={labelClass} style={labelStyle}>Transport to hospital</label>
+                    <select id="mode_of_transport" name="mode_of_transport" value={form.mode_of_transport} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {TRANSPORT_MODES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="time_to_hospital" className={labelClass} style={labelStyle}>Time to hospital</label>
+                    <select id="time_to_hospital" name="time_to_hospital" value={form.time_to_hospital} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {TRAVEL_TIMES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="incident_at" className={labelClass} style={labelStyle}>Time of collision</label>
+                    <input id="incident_at" name="incident_at" type="datetime-local" value={form.incident_at} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input" />
+                  </div>
+                  <div>
+                    <label htmlFor="vehicle_type" className={labelClass} style={labelStyle}>Vehicle type</label>
+                    <select id="vehicle_type" name="vehicle_type" value={form.vehicle_type} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="helmet_worn" className={labelClass} style={labelStyle}>Helmet worn</label>
+                    <select id="helmet_worn" name="helmet_worn" value={form.helmet_worn} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {YES_NO.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="site_of_injury" className={labelClass} style={labelStyle}>Primary injury site</label>
+                    <select id="site_of_injury" name="site_of_injury" value={form.site_of_injury} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {INJURY_SITES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="type_of_injury" className={labelClass} style={labelStyle}>Type of injury (primary)</label>
+                    <select id="type_of_injury" name="type_of_injury" value={form.type_of_injury} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {INJURY_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="secondary_site_of_injury" className={labelClass} style={labelStyle}>Secondary injury site</label>
+                    <select id="secondary_site_of_injury" name="secondary_site_of_injury" value={form.secondary_site_of_injury} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">None</option>
+                      {SECONDARY_INJURY_SITES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="secondary_type_of_injury" className={labelClass} style={labelStyle}>Type of injury (secondary)</label>
+                    <select id="secondary_type_of_injury" name="secondary_type_of_injury" value={form.secondary_type_of_injury} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">None</option>
+                      {SECONDARY_INJURY_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="other_injury" className={labelClass} style={labelStyle}>Other injury</label>
+                    <select id="other_injury" name="other_injury" value={form.other_injury} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {OTHER_INJURY_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" disabled={isSubmittingSeverity} className="py-2.5 px-6 text-sm gradient-btn">
+                  {isSubmittingSeverity ? 'Saving...' : 'Save Severity Inputs'}
+                </button>
+              </form>
+            </Card>
           )}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Fields marked <span className="font-semibold" style={{ color: '#f87171' }}>*</span> are required
-              for the minimum complete model input set.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="name" className={labelClass} style={labelStyle}>
-                  Patient name {requiredStar}
-                </label>
-                <input id="name" name="name" type="text" required value={form.name} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input" />
-              </div>
 
-              <div>
-                <label htmlFor="age" className={labelClass} style={labelStyle}>
-                  Age {requiredStar}
-                </label>
-                <input id="age" name="age" type="number" min={1} max={100} required value={form.age ?? ''}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input" />
-              </div>
-
-              <div>
-                <label htmlFor="gender" className={labelClass} style={labelStyle}>Gender</label>
-                <select id="gender" name="gender" value={form.gender} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Not provided</option>
-                  {GENDERS.map((g) => (<option key={g} value={g}>{g}</option>))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="incident_at" className={labelClass} style={labelStyle}>
-                  Incident date and time {requiredStar}
-                </label>
-                <input id="incident_at" name="incident_at" type="datetime-local" required
-                  value={form.incident_at} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input" />
-              </div>
-
-              <div>
-                <label htmlFor="collision_type" className={labelClass} style={labelStyle}>
-                  Collision type {requiredStar}
-                </label>
-                <select id="collision_type" name="collision_type" required value={form.collision_type}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select type</option>
-                  {COLLISION_TYPES.map((ct) => (<option key={ct} value={ct}>{ct}</option>))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="mode_of_transport" className={labelClass} style={labelStyle}>
-                  Transport to hospital {requiredStar}
-                </label>
-                <select id="mode_of_transport" name="mode_of_transport" required value={form.mode_of_transport}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select transport</option>
-                  {TRANSPORT_MODES.map((mode) => (<option key={mode} value={mode}>{mode}</option>))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="time_to_hospital" className={labelClass} style={labelStyle}>
-                  Time to hospital {requiredStar}
-                </label>
-                <select id="time_to_hospital" name="time_to_hospital" required value={form.time_to_hospital}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select travel time</option>
-                  {TRAVEL_TIMES.map((time) => (<option key={time} value={time}>{time}</option>))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="vehicle_type" className={labelClass} style={labelStyle}>
-                  Vehicle type {requiredStar}
-                </label>
-                <select id="vehicle_type" name="vehicle_type" required value={form.vehicle_type}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select vehicle</option>
-                  {VEHICLE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="road_type" className={labelClass} style={labelStyle}>Road type {requiredStar}</label>
-                <select id="road_type" name="road_type" required value={form.road_type} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select road type</option>
-                  {ROAD_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="speed" className={labelClass} style={labelStyle}>Approximate speed {requiredStar}</label>
-                <select id="speed" name="speed" required value={form.speed} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select speed</option>
-                  {SPEEDS.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="collision_force_from" className={labelClass} style={labelStyle}>Collision force from {requiredStar}</label>
-                <select id="collision_force_from" name="collision_force_from" required value={form.collision_force_from}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select direction</option>
-                  {COLLISION_FORCES.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="visibility" className={labelClass} style={labelStyle}>Visibility {requiredStar}</label>
-                <select id="visibility" name="visibility" required value={form.visibility} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select visibility</option>
-                  <option value="adequate">adequate</option>
-                  <option value="poor">poor</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="road_condition" className={labelClass} style={labelStyle}>Road condition {requiredStar}</label>
-                <input id="road_condition" name="road_condition" required value={form.road_condition}
-                  onChange={handleChange} placeholder="e.g. dry, wet"
-                  className="w-full px-4 py-2.5 text-sm dark-input" />
-              </div>
-
-              <div>
-                <label htmlFor="helmet_worn" className={labelClass} style={labelStyle}>Helmet worn</label>
-                <select id="helmet_worn" name="helmet_worn" value={form.helmet_worn} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Not applicable / unknown</option>
-                  {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="road_signals_exist" className={labelClass} style={labelStyle}>Road signals existed</label>
-                <select id="road_signals_exist" name="road_signals_exist" value={form.road_signals_exist}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Unknown</option>
-                  {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="alcohol_consumption" className={labelClass} style={labelStyle}>Alcohol consumption {requiredStar}</label>
-                <select id="alcohol_consumption" name="alcohol_consumption" required value={form.alcohol_consumption}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select</option>
-                  {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="illicit_drugs" className={labelClass} style={labelStyle}>Illicit drugs</label>
-                <select id="illicit_drugs" name="illicit_drugs" value={form.illicit_drugs} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Unknown</option>
-                  {YES_NO.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="site_of_injury" className={labelClass} style={labelStyle}>
-                  Primary injury site {requiredStar}
-                </label>
-                <select id="site_of_injury" name="site_of_injury" required value={form.site_of_injury}
-                  onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">Select injury site</option>
-                  {INJURY_SITES.map((site) => (<option key={site} value={site}>{site}</option>))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="secondary_site_of_injury" className={labelClass} style={labelStyle}>
-                  Secondary injury site
-                </label>
-                <select id="secondary_site_of_injury" name="secondary_site_of_injury"
-                  value={form.secondary_site_of_injury} onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm dark-input">
-                  <option value="">None</option>
-                  {INJURY_SITES.map((site) => <option key={site} value={site}>{site}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="injury_description" className={labelClass} style={labelStyle}>
-                Injury description {requiredStar}
-              </label>
-              <textarea id="injury_description" name="injury_description" required rows={3}
-                value={form.injury_description} onChange={handleChange}
-                className="w-full px-4 py-2.5 text-sm dark-input resize-vertical" />
-            </div>
-
-            <div>
-              <label htmlFor="secondary_injury_description" className={labelClass} style={labelStyle}>
-                Secondary injury description
-              </label>
-              <textarea id="secondary_injury_description" name="secondary_injury_description" rows={2}
-                value={form.secondary_injury_description} onChange={handleChange}
-                className="w-full px-4 py-2.5 text-sm dark-input resize-vertical" />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="py-2.5 px-6 text-sm gradient-btn"
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit and run available models'}
-            </button>
-          </form>
-        </Card>
+          {activeAccidentId && (
+            <Card title="Box 3: Other Models Input">
+              <form onSubmit={submitOtherInputs} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="road_type" className={labelClass} style={labelStyle}>Road type</label>
+                    <select id="road_type" name="road_type" value={form.road_type} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {ROAD_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="speed" className={labelClass} style={labelStyle}>Approximate speed</label>
+                    <select id="speed" name="speed" value={form.speed} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {SPEEDS.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="road_condition" className={labelClass} style={labelStyle}>Road condition</label>
+                    <select id="road_condition" name="road_condition" value={form.road_condition} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {ROAD_CONDITIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="visibility" className={labelClass} style={labelStyle}>Visibility</label>
+                    <select id="visibility" name="visibility" value={form.visibility} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      <option value="adequate">adequate</option>
+                      <option value="poor">poor</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="road_signals_exist" className={labelClass} style={labelStyle}>Road signals existed</label>
+                    <select id="road_signals_exist" name="road_signals_exist" value={form.road_signals_exist} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {YES_NO.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="collision_force_from" className={labelClass} style={labelStyle}>Collision force from</label>
+                    <select id="collision_force_from" name="collision_force_from" value={form.collision_force_from} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {COLLISION_FORCES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="alcohol_consumption" className={labelClass} style={labelStyle}>Alcohol consumption</label>
+                    <select id="alcohol_consumption" name="alcohol_consumption" value={form.alcohol_consumption} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {YES_NO.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="illicit_drugs" className={labelClass} style={labelStyle}>Illicit drugs</label>
+                    <select id="illicit_drugs" name="illicit_drugs" value={form.illicit_drugs} onChange={handleChange} className="w-full px-4 py-2.5 text-sm dark-input">
+                      <option value="">Unknown</option>
+                      {YES_NO.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" disabled={isSubmittingOther} className="py-2.5 px-6 text-sm gradient-btn">
+                  {isSubmittingOther ? 'Saving...' : 'Save Other Inputs'}
+                </button>
+              </form>
+            </Card>
+          )}
+        </div>
 
         {/* My records */}
         <Card title="My patient records">
-          {patientsError && (
-            <div
-              className="mb-4 px-4 py-3 rounded-lg text-sm"
-              style={{
-                color: '#fca5a5',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
-              }}
-            >
-              {patientsError}
-            </div>
-          )}
           {isLoadingPatients ? (
             <LoadingSpinner />
           ) : myPatients.length === 0 ? (
-            <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>No patient records yet.</p>
+            <p className="text-sm py-4 text-slate-400">No patient records yet.</p>
           ) : (
-            <div
-              className="rounded-lg overflow-hidden"
-              style={{ border: '1px solid var(--border-subtle)' }}
-            >
+            <div className="rounded-lg overflow-hidden border border-slate-700">
               {myPatients.map((p) => (
-                <PatientListItem key={p.id} patient={p} badgeType="severity" />
+                <PatientListItem key={p.id} patient={p} badgeType="severity" onClick={() => handlePatientSelect(p)} />
               ))}
             </div>
           )}

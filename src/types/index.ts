@@ -26,7 +26,7 @@ export interface AuthResponse {
 
 // ── Severity & Priority ─────────────────────────────────────────────────────
 
-export type Severity = 'Critical' | 'Moderate' | 'Minor';
+export type Severity = 'High' | 'Moderate' | 'Severity not classified';
 export type Priority = 'High' | 'Medium' | 'Low';
 export type TransferStatus = 'pending_authorization' | 'authorized' | 'approved' | 'rejected';
 export type RiskLevel = 'High' | 'Medium' | 'Low';
@@ -59,11 +59,8 @@ export interface XAICounterfactualRecord {
 
 export interface XAIExplanation {
   model: string;
-  uncertainty_type: 'epistemic' | 'aleatoric' | 'not_applicable_fully_specified';
-  message?: string;
-  hinge_message?: string;
-  value_of_information_ranking?: XAIVOIRecord[];
-  counterfactual_ranking?: XAICounterfactualRecord[];
+  predicted_class?: string;
+  doctor_explanation: string[];
 }
 
 // ── Patient ─────────────────────────────────────────────────────────────────
@@ -95,9 +92,9 @@ export interface PatientIntakeForm {
   mode_of_transport: string;
   time_to_hospital: string;
   site_of_injury: string;
+  type_of_injury: string;
   secondary_site_of_injury: string;
-  secondary_injury_description: string;
-  injury_description: string;
+  secondary_type_of_injury: string;
   incident_at: string;
   vehicle_type: string;
   helmet_worn: string;
@@ -109,6 +106,10 @@ export interface PatientIntakeForm {
   collision_force_from: string;
   alcohol_consumption: string;
   illicit_drugs: string;
+  // Severity model raw inputs
+  mode_of_travel_during_accident: string;
+  passenger_type: string;
+  other_injury: string;
 }
 
 // ── Prognosis ───────────────────────────────────────────────────────────────

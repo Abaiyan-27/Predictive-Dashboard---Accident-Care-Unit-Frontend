@@ -36,9 +36,9 @@ export default function App() {
             }
           />
           <Route
-            path="/doctor/patient/:id"
+            path="/patient/:id"
             element={
-              <ProtectedRoute allowedRoles={['doctor']}>
+              <ProtectedRoute allowedRoles={['doctor', 'admin']}>
                 <PatientDetail />
               </ProtectedRoute>
             }
