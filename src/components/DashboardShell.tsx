@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import logo from '../../Predictive Care Dashboard Logo.png';
 
 const ROLE_LABELS: Record<string, string> = {
   nurse: 'Nurse',
@@ -30,6 +31,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
           <div className="flex items-center justify-between h-16">
             {/* Wordmark */}
             <div className="flex items-center gap-3">
+              <img src={logo} alt="Accident Care Logo" className="h-8 w-auto" />
               <h1 className="text-lg font-bold tracking-tight gradient-text">
                 Accident Care
               </h1>

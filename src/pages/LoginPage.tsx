@@ -5,6 +5,7 @@ import type { Role } from '../types';
 import axios from 'axios';
 import { getApiErrorMessage } from '../api/client';
 import { changePassword, PASSWORD_CHANGE_REQUIRED } from '../api';
+import logo from '../../Predictive Care Dashboard Logo.png';
 
 const ROLE_HOME: Record<Role, string> = {
   nurse: '/nurse',
@@ -91,7 +92,8 @@ export function LoginPage() {
 
       <div className="w-full max-w-md relative z-10 animate-slide-up">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <img src={logo} alt="Accident Care Logo" className="h-16 w-auto mb-4" />
           <h1 className="text-3xl font-bold tracking-tight gradient-text">
             Accident Care
           </h1>
