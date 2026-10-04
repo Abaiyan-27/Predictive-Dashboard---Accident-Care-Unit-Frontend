@@ -1,4 +1,5 @@
 import { Page, expect } from '@playwright/test';
+import { ROLE_HOME, testAccount, type TestRole } from './accounts';
 
 /**
  * Shared login helper that properly waits for the Supabase auth API
@@ -28,4 +29,10 @@ export async function loginAs(
 
   // Wait for client-side navigation after the token is stored
   await expect(page).toHaveURL(expectedUrlPattern, { timeout: 10000 });
+}
+
+/** Log in with the configured test account for a role (see accounts.ts). */
+export async function loginAsRole(page: Page, role: TestRole) {
+  const { email, password } = testAccount(role);
+  await loginAs(page, email, password, ROLE_HOME[role]);
 }

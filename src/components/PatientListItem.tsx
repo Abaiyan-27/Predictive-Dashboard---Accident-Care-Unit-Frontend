@@ -1,14 +1,17 @@
-import type { Patient, Severity, Priority } from '../types';
+import type { ReactNode } from 'react';
+import type { Patient } from '../types';
 import { SeverityBadge } from './SeverityBadge';
 
 interface PatientListItemProps {
   patient: Patient;
-  badgeType?: 'severity' | 'priority';
   onClick?: () => void;
+  /** Extra status lines under the name (the nurse list shows workflow progress). */
+  details?: ReactNode;
+  /** Replaces the default severity badge. */
+  badge?: ReactNode;
 }
 
-export function PatientListItem({ patient, badgeType = 'severity', onClick }: PatientListItemProps) {
-  const badgeValue: Severity | Priority | null = badgeType === 'priority' ? patient.priority : patient.severity;
+export function PatientListItem({ patient, onClick, details, badge }: PatientListItemProps) {
 
   return (
     <div
@@ -37,10 +40,11 @@ export function PatientListItem({ patient, badgeType = 'severity', onClick }: Pa
           {patient.name}
         </p>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-          {patient.age} yr, {patient.gender} &middot; {patient.collision_type} &middot; {patient.admission_date}
+          {patient.age} yr, {patient.gender}
         </p>
+        {details}
       </div>
-      <SeverityBadge value={badgeValue} />
+      {badge ?? <SeverityBadge value={patient.severity} />}
     </div>
   );
 }

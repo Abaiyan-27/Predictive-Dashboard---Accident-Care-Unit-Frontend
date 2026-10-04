@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { loginAs } from '../helpers/login';
+import { loginAsRole } from '../helpers/login';
 
 test.describe('Admin Workflow', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'admin@accidentcare.org', 'DemoPass123!', /\/admin/);
+    await loginAsRole(page, 'admin');
   });
 
   test('Admin dashboard loads and displays management options', async ({ page }) => {

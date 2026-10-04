@@ -55,7 +55,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                     {user.name}
                   </p>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {user.role === 'admin' && !user.hospital_id ? 'All hospitals' : user.hospital_name}
+                    {user.hospital_name}
                   </p>
                 </div>
                 <button

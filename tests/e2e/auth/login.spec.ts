@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { loginAs } from '../helpers/login';
+import { loginAsRole } from '../helpers/login';
+import { testAccount } from '../helpers/accounts';
 
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,27 +8,27 @@ test.describe('Authentication Flow', () => {
   });
 
   test('Valid login as nurse redirects to nurse dashboard', async ({ page }) => {
-    await loginAs(page, 'nurse@accidentcare.org', 'DemoPass123!', /\/nurse/);
+    await loginAsRole(page, 'nurse');
     await expect(page.locator('h1', { hasText: 'Patient intake' })).toBeVisible();
   });
 
   test('Valid login as doctor redirects to doctor dashboard', async ({ page }) => {
-    await loginAs(page, 'doctor@accidentcare.org', 'DemoPass123!', /\/doctor/);
+    await loginAsRole(page, 'doctor');
     await expect(page.locator('h1', { hasText: 'Admitted patients' })).toBeVisible();
   });
 
   test('Valid login as admin redirects to admin dashboard', async ({ page }) => {
-    await loginAs(page, 'admin@accidentcare.org', 'DemoPass123!', /\/admin/);
+    await loginAsRole(page, 'admin');
     await expect(page.locator('h1', { hasText: 'Administration' })).toBeVisible();
   });
 
   test('Valid login as government redirects to government dashboard', async ({ page }) => {
-    await loginAs(page, 'gov@accidentcare.org', 'DemoPass123!', /\/government/);
-    await expect(page.locator('h1', { hasText: 'Data mining insights' })).toBeVisible();
+    await loginAsRole(page, 'government');
+    await expect(page.locator('h1', { hasText: 'Network overview' })).toBeVisible();
   });
 
   test('Invalid password displays error', async ({ page }) => {
-    await page.fill('input[type="email"]', 'nurse@accidentcare.org');
+    await page.fill('input[type="email"]', testAccount('nurse').email);
     await page.fill('input[type="password"]', 'wrongpassword');
 
     // Click submit and wait for the error API response
@@ -44,7 +45,7 @@ test.describe('Authentication Flow', () => {
   });
 
   test('Missing required fields prevents submission', async ({ page }) => {
-    await page.fill('input[type="email"]', 'nurse@accidentcare.org');
+    await page.fill('input[type="email"]', 'someone@example.org');
     // Password missing
     await page.click('button[type="submit"]');
     

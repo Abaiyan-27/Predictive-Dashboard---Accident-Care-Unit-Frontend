@@ -1,20 +1,22 @@
 import { test, expect } from '@playwright/test';
-import { loginAs } from '../helpers/login';
+import { loginAsRole } from '../helpers/login';
 
 test.describe('Government Analytics Workflow', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'gov@accidentcare.org', 'DemoPass123!', /\/government/);
+    await loginAsRole(page, 'government');
   });
 
   test('Government dashboard loads analytics components', async ({ page }) => {
-    await expect(page.locator('h1:has-text("Data mining insights")')).toBeVisible();
-    
-    // Check for analytic charts or metrics
+    await expect(page.locator('h1:has-text("Network overview")')).toBeVisible();
+
+    // Trends and charts live on the Forecast page.
+    await page.getByRole('link', { name: 'Forecast' }).first().click();
     await expect(page.locator('text=Historical monthly accident trends').first()).toBeVisible();
     await expect(page.locator('.recharts-wrapper').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('Date filters update the analytics data', async ({ page }) => {
+    await page.goto('/government/forecast');
     await expect(page.locator('text=Historical monthly accident trends').first()).toBeVisible();
     
     // Example: changing a date filter or dropdown

@@ -10,7 +10,7 @@
 }
 
 /* ── Dark Theme Design Tokens ──────────────────────────────────────────── */
-:root {
+.dark {
   --bg-base: #0b0f1a;
   --bg-surface: rgba(15, 23, 42, 0.6);
   --bg-surface-hover: rgba(30, 41, 59, 0.7);
@@ -28,6 +28,13 @@
   --text-muted: #64748b;
   --text-accent: #a78bfa;
 
+  /* Status tones (text): errors, warnings / out of date, success, info, accent */
+  --tone-danger: #fca5a5;
+  --tone-warning: #fcd34d;
+  --tone-success: #6ee7b7;
+  --tone-info: #93c5fd;
+  --tone-accent: #c4b5fd;
+
   --gradient-brand: linear-gradient(135deg, #a78bfa 0%, #6366f1 50%, #3b82f6 100%);
   --gradient-btn: linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #3b82f6 100%);
   --gradient-btn-hover: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #4f46e5 100%);
@@ -37,6 +44,43 @@
   --shadow-glow-sm: 0 0 10px rgba(139, 92, 246, 0.1);
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.2);
   --shadow-card-hover: 0 8px 40px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Light Theme Design Tokens ─────────────────────────────────────────── */
+:root, .light {
+  --bg-base: #f8fafc;
+  --bg-surface: rgba(255, 255, 255, 0.8);
+  --bg-surface-hover: rgba(241, 245, 249, 0.9);
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: rgba(255, 255, 255, 1);
+  --bg-input: rgba(255, 255, 255, 1);
+  --bg-header: rgba(255, 255, 255, 0.95);
+
+  --border-subtle: rgba(15, 23, 42, 0.1);
+  --border-input: rgba(15, 23, 42, 0.15);
+  --border-accent: rgba(139, 92, 246, 0.4);
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-accent: #7c3aed;
+
+  /* Status tones (text), dark enough to read on white */
+  --tone-danger: #b91c1c;
+  --tone-warning: #92400e;
+  --tone-success: #047857;
+  --tone-info: #1d4ed8;
+  --tone-accent: #6d28d9;
+
+  --gradient-brand: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%);
+  --gradient-btn: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%);
+  --gradient-btn-hover: linear-gradient(135deg, #6d28d9 0%, #4338ca 50%, #1d4ed8 100%);
+  --gradient-header: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+
+  --shadow-glow-purple: 0 0 15px rgba(139, 92, 246, 0.2);
+  --shadow-glow-sm: 0 0 8px rgba(139, 92, 246, 0.15);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Keyframe Animations ───────────────────────────────────────────────── */

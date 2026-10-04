@@ -12,12 +12,15 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
+# Environment variables (only the *.example templates are tracked)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+!.env.test.example
+
+# Generated test output (traces and page snapshots can contain credentials)
+test-results/
+playwright-report/
 
 # Editor directories and files
 .vscode/*

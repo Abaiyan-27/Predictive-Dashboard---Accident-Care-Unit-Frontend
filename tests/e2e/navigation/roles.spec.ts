@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { loginAs } from '../helpers/login';
+import { loginAsRole } from '../helpers/login';
 
 test.describe('Role-Based Navigation & Access', () => {
   test('Nurse cannot access doctor dashboard', async ({ page }) => {
-    await loginAs(page, 'nurse@accidentcare.org', 'DemoPass123!', /\/nurse/);
+    await loginAsRole(page, 'nurse');
 
     // Attempt direct navigation
     await page.goto('/doctor');
@@ -13,7 +13,7 @@ test.describe('Role-Based Navigation & Access', () => {
   });
 
   test('Doctor cannot access admin dashboard', async ({ page }) => {
-    await loginAs(page, 'doctor@accidentcare.org', 'DemoPass123!', /\/doctor/);
+    await loginAsRole(page, 'doctor');
 
     // Attempt direct navigation
     await page.goto('/admin');

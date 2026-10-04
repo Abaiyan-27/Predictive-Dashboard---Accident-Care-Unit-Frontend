@@ -1,6 +1,6 @@
 export function LoadingSpinner() {
   return (
-    <div className="flex items-center justify-center py-12">
+    <div className="flex flex-col items-center justify-center gap-3 py-12" role="progressbar" aria-label="Loading">
       <div
         className="h-10 w-10 rounded-full animate-pulse-glow"
         style={{
@@ -10,6 +10,7 @@ export function LoadingSpinner() {
           animation: 'spin 0.8s linear infinite, pulseGlow 2s ease-in-out infinite',
         }}
       />
+      <span className="text-xs text-[color:var(--text-muted)]">Loading…</span>
     </div>
   );
 }

@@ -1,47 +1,37 @@
 import { test, expect } from '@playwright/test';
-import { loginAs } from '../helpers/login';
+import { loginAsRole } from '../helpers/login';
 
-test.describe('Doctor Workflow', () => {
+/**
+ * Doctor workflow against a live backend with the demo accounts (no mocks).
+ * The hospital may or may not have patients; both outcomes are checked.
+ */
+test.describe('Doctor Workflow (live backend)', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'doctor@accidentcare.org', 'DemoPass123!', /\/doctor/);
+    await loginAsRole(page, 'doctor');
   });
 
-  test('Doctor dashboard loads and displays patients', async ({ page }) => {
-    await expect(page.locator('h1:has-text("Admitted patients")')).toBeVisible();
-    
-    // Wait for loading to complete: the spinner disappears and content appears.
-    // The dashboard renders one of three states:
-    //   1. Patient list items (div with role="button")
-    //   2. "No patients found." text
-    //   3. An error message (dynamic text from the API)
-    // We also check for "0 patients" badge which appears when loading finishes with empty results.
-    const patientItem = page.locator('[role="button"]').first();
-    const noPatients = page.locator('text=No patients found.');
-    const zeroBadge = page.locator('text=0 patients');
-    
-    await expect(patientItem.or(noPatients).or(zeroBadge)).toBeVisible({ timeout: 30000 });
-    
-    if (await patientItem.isVisible()) {
-      await patientItem.click();
-      await expect(page).toHaveURL(/\/doctor\/patient\//);
-    }
+  test('the dashboard lists the hospital\'s patients or says there are none', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Admitted patients' })).toBeVisible();
+    const patient = page.locator('[role="button"]').first();
+    const empty = page.getByText('No patients found.');
+    await expect(patient.or(empty)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('alert')).toHaveCount(0);
   });
 
-  test('Doctor can view patient details and predictions', async ({ page }) => {
-    // Wait for patients to load
-    const patientItem = page.locator('[role="button"]').first();
-    const noPatients = page.locator('text=No patients found.');
-    const zeroBadge = page.locator('text=0 patients');
-    
-    await expect(patientItem.or(noPatients).or(zeroBadge)).toBeVisible({ timeout: 30000 });
-    
-    if (await patientItem.isVisible()) {
-      await patientItem.click();
-      
-      // Patient detail page - wait for prognosis panel to load
-      await expect(page.locator('text=Patient record')).toBeVisible({ timeout: 10000 });
-      await expect(page.locator('text=Prognosis panel')).toBeVisible({ timeout: 10000 });
-    }
+  test('a patient episode shows the sections in order, with Severity read-only', async ({ page }) => {
+    const patient = page.locator('[role="button"]').first();
+    const empty = page.getByText('No patients found.');
+    await expect(patient.or(empty)).toBeVisible({ timeout: 30000 });
+    test.skip(await empty.isVisible(), 'this hospital has no patients in the demo database');
+
+    await patient.click();
+    await expect(page).toHaveURL(/\/doctor\/episodes\//);
+    await expect(page.locator('main h2').first()).toHaveText('Patient', { timeout: 15000 });
+    const headings = await page.locator('main h2').allInnerTexts();
+    expect(headings.slice(0, 3)).toEqual(['Patient', 'Severity', 'Treatment']);
+    expect(headings).toEqual(expect.arrayContaining(['Stay Duration', 'Transfer', 'Discharge Outcome', 'History']));
+    const severity = page.getByTestId('doctor-severity');
+    await expect(severity).toContainText('Read-only');
+    await expect(severity.locator('button, input, select')).toHaveCount(0);
   });
 });
-

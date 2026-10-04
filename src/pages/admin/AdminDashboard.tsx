@@ -2,37 +2,41 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardShell } from '../../components/DashboardShell';
 import { Card } from '../../components/Card';
-import { SeverityBadge } from '../../components/SeverityBadge';
-import { StatusBadge } from '../../components/StatusBadge';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
-import { useAuth } from '../../auth/AuthContext';
+import { ListFooter } from '../../components/ListFooter';
+import { StaleNotice } from '../../components/StaleNotice';
+import { StatusBadge } from '../../components/StatusBadge';
+import { TransferSummary } from '../../components/TransferSummary';
 import {
-  getHospital,
-  getHospitals,
-  getAdmittedPatients,
+  authorizeTransfer,
   createUser,
-  getTransferRequests,
-  updateTransferStatus,
+  getAdminPatients,
   getAuditLogs,
+  getStaffUsers,
+  getTransferRequests,
+  rejectTransfer,
 } from '../../api';
 import { getApiErrorMessage } from '../../api/client';
 import type {
-  HospitalInfo,
-  Patient,
-  TransferRequest,
+  AdminPatientRow,
+  AdminPredictionView,
   AuditLog,
+  CreatedUser,
   CreateUserPayload,
   StaffRole,
-  TransferStatus,
+  StaffUser,
+  TransferRequest,
 } from '../../types';
+import { AuditLogTable } from './AuditLogTable';
 
-type AdminTab = 'status' | 'users' | 'transfers' | 'logs';
+type AdminTab = 'patients' | 'transfers' | 'users' | 'logs';
 
 const TABS: { key: AdminTab; label: string }[] = [
-  { key: 'status', label: 'Hospital status' },
-  { key: 'users', label: 'User management' },
+  { key: 'patients', label: 'Patients' },
   { key: 'transfers', label: 'Transfers' },
-  { key: 'logs', label: 'System logs' },
+  { key: 'users', label: 'User management' },
+  { key: 'logs', label: 'Audit log' },
 ];
 
 const ROLE_OPTIONS: { value: StaffRole; label: string }[] = [
@@ -41,554 +45,376 @@ const ROLE_OPTIONS: { value: StaffRole; label: string }[] = [
   { value: 'admin', label: 'Administrator' },
 ];
 
-/* Shared dark-themed styling helpers */
-const labelClass = "block text-sm font-medium mb-1.5";
+const LOG_FILTERS = [
+  { value: '', label: 'All events' },
+  { value: 'transfer_*', label: 'Transfers' },
+  { value: 'user_created', label: 'Staff accounts' },
+  { value: 'treatment_logged', label: 'Treatments' },
+  { value: 'patient_intake', label: 'Intake' },
+];
+const LOG_PAGE = 25;
+
+const labelClass = 'block text-sm font-medium mb-1.5';
 const labelStyle = { color: 'var(--text-secondary)' };
-const thStyle = {
-  color: 'var(--text-muted)',
-  borderBottom: '1px solid var(--border-subtle)',
-};
+const thStyle = { color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' };
+const EMPTY_USER: CreateUserPayload = { name: '', email: '', password: '', role: 'nurse' };
+
+type Pending =
+  | { kind: 'authorize'; transfer: TransferRequest }
+  | { kind: 'reject'; transfer: TransferRequest; reason: string }
+  | { kind: 'create-user' };
+
+/** A model prediction as the admin sees it: read-only, with its freshness. */
+export function PredictionText({ view }: { view: AdminPredictionView }) {
+  if (!view.prediction || !view.prediction.prediction) {
+    return <span className="text-[color:var(--text-muted)]">{view.state === 'WAITING_FOR_INPUTS' ? 'Waiting for treatment' : 'Not available'}</span>;
+  }
+  if (view.prediction.stale) {
+    return (
+      <span className="flex flex-col">
+        <StaleNotice compact reason={view.prediction.stale_reason} />
+        <span className="text-xs text-[color:var(--text-muted)] line-through">{view.prediction.prediction}</span>
+      </span>
+    );
+  }
+  return <span className="text-[color:var(--text-primary)]">{view.prediction.prediction}</span>;
+}
+
+function Alert({ kind, message }: { kind: 'error' | 'success'; message: string }) {
+  const style = kind === 'error'
+    ? { color: 'var(--tone-danger)', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }
+    : { color: 'var(--tone-success)', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' };
+  return <div role={kind === 'error' ? 'alert' : 'status'} className="mb-4 px-4 py-3 rounded-lg text-sm" style={style}>{message}</div>;
+}
 
 export function AdminDashboard() {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<AdminTab>('status');
+  const [activeTab, setActiveTab] = useState<AdminTab>('patients');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  // Hospital status state
-  const [hospital, setHospital] = useState<HospitalInfo | null>(null);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
-  const [statusError, setStatusError] = useState('');
-
-  // User management state
-  const [userForm, setUserForm] = useState<CreateUserPayload>({
-    name: '',
-    email: '',
-    password: '',
-    role: 'nurse',
-    hospital_id: user?.hospital_id ?? '',
-  });
-  const [hospitals, setHospitals] = useState<HospitalInfo[]>([]);
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [userCreated, setUserCreated] = useState(false);
-  const [userError, setUserError] = useState('');
-
-  // Transfers state
+  const [patients, setPatients] = useState<AdminPatientRow[]>([]);
+  const [patientTotal, setPatientTotal] = useState(0);
   const [transfers, setTransfers] = useState<TransferRequest[]>([]);
-  const [isLoadingTransfers, setIsLoadingTransfers] = useState(true);
-  const [updatingTransferId, setUpdatingTransferId] = useState<string | null>(null);
-  const [transferError, setTransferError] = useState('');
+  const [transferTotal, setTransferTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [rejecting, setRejecting] = useState<{ id: string; reason: string } | null>(null);
+  const [users, setUsers] = useState<StaffUser[]>([]);
+  const [userForm, setUserForm] = useState<CreateUserPayload>({ ...EMPTY_USER });
+  const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [logFilter, setLogFilter] = useState('');
+  const [hasMoreLogs, setHasMoreLogs] = useState(false);
 
-  // Audit logs state
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(true);
-  const [logsError, setLogsError] = useState('');
-
-  // ── Fetch hospital status data ──────────────────────────────────────────
-
-  useEffect(() => {
-    if (activeTab !== 'status' || !user) return;
-
-    let cancelled = false;
-    setIsLoadingStatus(true);
-    setStatusError('');
-
-    const loadStatus = async () => {
-      try {
-        if (user.hospital_id) {
-          const [hospitalInfo, pts] = await Promise.all([
-            getHospital(user.hospital_id),
-            getAdmittedPatients(user.hospital_id),
-          ]);
-          if (!cancelled) {
-            setHospital(hospitalInfo);
-            setPatients(pts);
-          }
-          return;
-        }
-
-        const allHospitals = await getHospitals();
-        const patientGroups = await Promise.all(
-          allHospitals.map((item) => getAdmittedPatients(item.hospital_id)),
-        );
-        if (!cancelled) {
-          setHospitals(allHospitals);
-          setHospital({
-            hospital_id: 'all',
-            name: 'All hospitals',
-            type: `${allHospitals.length} registered`,
-            region: null,
-            district: null,
-            address: null,
-          });
-          setPatients(patientGroups.flat());
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setStatusError(getApiErrorMessage(error, 'Unable to load hospital status.'));
-        }
-      } finally {
-        if (!cancelled) setIsLoadingStatus(false);
-      }
-    };
-
-    loadStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, user]);
-
-  useEffect(() => {
-    if (activeTab !== 'users') return;
-    setUserError('');
-    getHospitals()
-      .then(setHospitals)
-      .catch((error: unknown) => {
-        setUserError(getApiErrorMessage(error, 'Unable to load hospitals.'));
-      });
-  }, [activeTab]);
-
-  // ── Fetch transfers ─────────────────────────────────────────────────────
-
-  const fetchTransfers = useCallback(async () => {
-    setIsLoadingTransfers(true);
-    setTransferError('');
+  const load = useCallback(async (tab: AdminTab, filter = '') => {
+    setLoading(true);
+    setError('');
     try {
-      const data = await getTransferRequests();
-      setTransfers(data);
-    } catch (error) {
-      setTransferError(getApiErrorMessage(error, 'Unable to load transfer requests.'));
+      if (tab === 'patients') {
+        const page = await getAdminPatients();
+        setPatients(page.rows);
+        setPatientTotal(page.total);
+      }
+      if (tab === 'transfers') {
+        const page = await getTransferRequests();
+        setTransfers(page.rows);
+        setTransferTotal(page.total);
+      }
+      if (tab === 'users') setUsers(await getStaffUsers());
+      if (tab === 'logs') {
+        const page = await getAuditLogs({ action: filter, limit: LOG_PAGE, offset: 0 });
+        setLogs(page);
+        setHasMoreLogs(page.length === LOG_PAGE);
+      }
+    } catch (loadError) {
+      setError(getApiErrorMessage(loadError, 'Unable to load this page.'));
     } finally {
-      setIsLoadingTransfers(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'transfers') {
-      fetchTransfers();
-    }
-  }, [activeTab, fetchTransfers]);
+    load(activeTab, logFilter);
+  }, [activeTab, logFilter, load]);
 
-  // ── Fetch audit logs ────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (activeTab !== 'logs') return;
-
-    setIsLoadingLogs(true);
-    setLogsError('');
-    getAuditLogs()
-      .then(setAuditLogs)
-      .catch((error: unknown) => {
-        setLogsError(getApiErrorMessage(error, 'Unable to load audit logs.'));
-      })
-      .finally(() => setIsLoadingLogs(false));
-  }, [activeTab]);
-
-  // ── Handlers ────────────────────────────────────────────────────────────
-
-  const handleUserFormChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = e.target;
-    setUserForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsCreatingUser(true);
-    setUserCreated(false);
-    setUserError('');
-
+  const loadMoreRows = async (tab: 'patients' | 'transfers') => {
+    setLoadingMore(true);
     try {
-      await createUser(userForm);
-      setUserCreated(true);
-      setUserForm({
-        name: '',
-        email: '',
-        password: '',
-        role: 'nurse',
-        hospital_id: user?.hospital_id ?? '',
-      });
-    } catch (error) {
-      setUserError(getApiErrorMessage(error, 'Unable to create the user account.'));
+      if (tab === 'patients') {
+        const page = await getAdminPatients(patients.length);
+        setPatients((prev) => [...prev, ...page.rows]);
+        setPatientTotal(page.total);
+      } else {
+        const page = await getTransferRequests(transfers.length);
+        setTransfers((prev) => [...prev, ...page.rows]);
+        setTransferTotal(page.total);
+      }
+    } catch (loadError) {
+      setError(getApiErrorMessage(loadError, 'Unable to load more entries.'));
     } finally {
-      setIsCreatingUser(false);
+      setLoadingMore(false);
     }
   };
 
-  const handleTransferAction = async (id: string, status: TransferStatus) => {
-    setUpdatingTransferId(id);
-    setTransferError('');
+  const loadMoreLogs = async () => {
     try {
-      await updateTransferStatus(id, status);
-      await fetchTransfers();
-    } catch (error) {
-      setTransferError(getApiErrorMessage(error, 'Unable to update the transfer.'));
-    } finally {
-      setUpdatingTransferId(null);
+      const page = await getAuditLogs({ action: logFilter, limit: LOG_PAGE, offset: logs.length });
+      setLogs((prev) => [...prev, ...page]);
+      setHasMoreLogs(page.length === LOG_PAGE);
+    } catch (loadError) {
+      setError(getApiErrorMessage(loadError, 'Unable to load more entries.'));
     }
   };
 
-  // ── Error/Success alert helpers ─────────────────────────────────────────
+  // ── Important actions wait for "Are you sure?"; nothing is sent before ──
 
-  const ErrorAlert = ({ message }: { message: string }) => (
-    <div
-      className="mb-4 px-4 py-3 rounded-lg text-sm"
-      style={{
-        color: '#fca5a5',
-        background: 'rgba(239, 68, 68, 0.1)',
-        border: '1px solid rgba(239, 68, 68, 0.2)',
-      }}
-    >
-      {message}
-    </div>
+  const confirmPending = async () => {
+    if (!pending) return;
+    const action = pending;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      if (action.kind === 'authorize') {
+        await authorizeTransfer(action.transfer.transfer_id);
+        setNotice('Transfer authorized. The nurses of this hospital can now process it.');
+      }
+      if (action.kind === 'reject') {
+        await rejectTransfer(action.transfer.transfer_id, action.reason);
+        setRejecting(null);
+        setNotice('Transfer rejected.');
+      }
+      if (action.kind === 'create-user') {
+        const created = await createUser(userForm);
+        setCreatedUser(created);
+        setUserForm({ ...EMPTY_USER });
+      }
+      await load(activeTab, logFilter);
+    } catch (actionError) {
+      setError(getApiErrorMessage(actionError, 'Unable to complete the action.'));
+      if (action.kind !== 'create-user') await load(activeTab, logFilter);
+    } finally {
+      setBusy(false);
+      setPending(null);
+    }
+  };
+
+  const confirmText = (action: Pending) => {
+    if (action.kind === 'authorize') {
+      return <p>Authorize the transfer of {action.transfer.patient_name ?? 'this patient'} to {action.transfer.destination_hospital}?</p>;
+    }
+    if (action.kind === 'reject') {
+      return <p>Reject the transfer of {action.transfer.patient_name ?? 'this patient'} to {action.transfer.destination_hospital}? This is final.</p>;
+    }
+    return <p>Create a {userForm.role} account for {userForm.name} ({userForm.email}) at your hospital?</p>;
+  };
+
+  // ── Tabs ────────────────────────────────────────────────────────────────
+
+  const renderPatients = () => (
+    <Card title="Patients at this hospital">
+      {patients.length === 0 ? (
+        <p className="text-sm py-4 text-[color:var(--text-muted)]">No patients found. Patients appear here once a nurse registers them at your hospital.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="admin-patients">
+            <thead>
+              <tr>
+                {['Patient', 'Age / gender', 'Admitted', 'Stay prediction', 'Transfer prediction', 'Transfer request'].map((h) => (
+                  <th key={h} className="text-left py-3 px-4 font-medium" style={thStyle}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {patients.map((p) => (
+                <tr key={p.accident_id} onClick={() => navigate(`/admin/episodes/${p.accident_id}`)}
+                  className="dark-table-row hover:bg-white/5 cursor-pointer" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td className="py-3 px-4 font-medium text-[color:var(--text-primary)]">
+                    <button type="button" className="text-left hover:underline" onClick={(e) => { e.stopPropagation(); navigate(`/admin/episodes/${p.accident_id}`); }}>
+                      {p.patient.full_name ?? 'Unknown'}
+                    </button>
+                  </td>
+                  <td className="py-3 px-4 text-[color:var(--text-secondary)]">{p.patient.age ?? '?'} / {p.patient.gender ?? '?'}</td>
+                  <td className="py-3 px-4 text-[color:var(--text-secondary)]">{p.created_at?.slice(0, 10)}</td>
+                  <td className="py-3 px-4"><PredictionText view={p.stay_duration} /></td>
+                  <td className="py-3 px-4"><PredictionText view={p.transfer} /></td>
+                  <td className="py-3 px-4">{p.open_transfer ? <StatusBadge status={p.open_transfer.status} /> : <span className="text-[color:var(--text-muted)]">None</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <ListFooter shown={patients.length} total={patientTotal} loading={loadingMore} onMore={() => loadMoreRows('patients')} noun="patients" />
+    </Card>
   );
 
-  const SuccessAlert = ({ message }: { message: string }) => (
-    <div
-      className="mb-4 px-4 py-3 rounded-lg text-sm"
-      style={{
-        color: '#6ee7b7',
-        background: 'rgba(16, 185, 129, 0.1)',
-        border: '1px solid rgba(16, 185, 129, 0.2)',
-      }}
-    >
-      {message}
-    </div>
-  );
-
-  // ── Render helpers ──────────────────────────────────────────────────────
-
-  const renderStatusTab = () => {
-    if (isLoadingStatus) return <LoadingSpinner />;
-
-    return (
-      <div className="space-y-6 animate-fade-in">
-        {statusError && <ErrorAlert message={statusError} />}
-        {/* Hospital summary */}
-        {hospital && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                {user?.hospital_id ? 'Hospital' : 'Scope'}
-              </p>
-              <p className="text-lg font-semibold mt-1" style={{ color: 'var(--text-primary)' }}>
-                {hospital.name}
-              </p>
-            </Card>
-            <Card>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Type</p>
-              <p className="text-lg font-semibold mt-1" style={{ color: 'var(--text-primary)' }}>
-                {hospital.type ?? 'Not specified'}
-              </p>
-            </Card>
-            <Card>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Current patients</p>
-              <p className="text-2xl font-bold mt-1 gradient-text">
-                {patients.length}
-              </p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                {user?.hospital_id
-                  ? ([hospital.district, hospital.region].filter(Boolean).join(', ') || 'Location not specified')
-                  : 'System-wide view'}
-              </p>
-            </Card>
-          </div>
-        )}
-
-        {/* Patient table with predicted LOS */}
-        <Card title="Current patients — model-predicted stay">
-          {patients.length === 0 ? (
-            <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>No patients found.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Name</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Admission date</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Severity</th>
-                    <th className="text-right py-3 px-4 font-medium" style={thStyle}>Predicted stay</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patients.map((p) => (
-                    <tr
-                      key={p.id}
-                      onClick={() => navigate(`/patient/${p.id}`)}
-                      className="dark-table-row hover:bg-white/5 cursor-pointer"
-                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                    >
-                      <td className="py-3 px-4 font-medium" style={{ color: 'var(--text-primary)' }}>{p.name}</td>
-                      <td className="py-3 px-4" style={{ color: 'var(--text-secondary)' }}>{p.admission_date}</td>
-                      <td className="py-3 px-4">
-                        <SeverityBadge value={p.severity} />
-                      </td>
-                      <td className="py-3 px-4 text-right font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {p.predicted_los ?? 'Unavailable'}
-                      </td>
-                    </tr>
+  const renderTransfers = () => (
+    <Card title="Transfer requests">
+      {transfers.length === 0 ? (
+        <p className="text-sm py-4 text-[color:var(--text-muted)]">No transfer requests. Request a transfer from a patient's page.</p>
+      ) : (
+        <ul className="space-y-4">
+          {transfers.map((t) => (
+            <li key={t.transfer_id} className="pb-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <TransferSummary transfer={t} />
+              {t.allowed_actions.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {t.allowed_actions.includes('authorize') && (
+                    <button type="button" onClick={() => setPending({ kind: 'authorize', transfer: t })} disabled={busy}
+                      className="px-3 py-1.5 text-xs gradient-btn">Authorize</button>
+                  )}
+                  {t.allowed_actions.includes('reject') && (rejecting?.id === t.transfer_id ? (
+                    <>
+                      <input aria-label="Rejection reason" value={rejecting.reason} placeholder="Reason (required)"
+                        onChange={(e) => setRejecting({ id: t.transfer_id, reason: e.target.value })}
+                        className="px-3 py-1.5 text-xs dark-input" />
+                      <button type="button" disabled={busy || !rejecting.reason.trim()}
+                        onClick={() => setPending({ kind: 'reject', transfer: t, reason: rejecting.reason.trim() })}
+                        className="px-3 py-1.5 text-xs rounded-lg border" style={{ color: 'var(--tone-danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                        Reject with this reason
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => setRejecting(null)}
+                        className="px-3 py-1.5 text-xs rounded-lg border" style={{ borderColor: 'var(--border-input)', color: 'var(--text-secondary)' }}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setRejecting({ id: t.transfer_id, reason: '' })} disabled={busy}
+                      className="px-3 py-1.5 text-xs rounded-lg border" style={{ color: 'var(--tone-danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                      Reject
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
-    );
-  };
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ListFooter shown={transfers.length} total={transferTotal} loading={loadingMore} onMore={() => loadMoreRows('transfers')} noun="transfer requests" />
+    </Card>
+  );
 
-  const renderUsersTab = () => (
-    <div className="animate-fade-in">
-      <Card title="Create new user">
-        {userCreated && <SuccessAlert message="User account created successfully." />}
-        {userError && <ErrorAlert message={userError} />}
-        <form onSubmit={handleCreateUser} className="space-y-4">
+  const renderUsers = () => (
+    <div className="space-y-6">
+      <Card title="Create staff account">
+        {createdUser && (
+          <Alert kind="success" message={createdUser.temporary_password
+            ? `Account created for ${createdUser.email}. Temporary password (shown once): ${createdUser.temporary_password} — hand it over in person; it must be changed at first sign-in.`
+            : `Account created for ${createdUser.email}. The password must be changed at first sign-in.`} />
+        )}
+        <form onSubmit={(e) => { e.preventDefault(); setCreatedUser(null); setPending({ kind: 'create-user' }); }} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="user-name" className={labelClass} style={labelStyle}>Name</label>
-              <input id="user-name" name="name" type="text" required value={userForm.name}
-                onChange={handleUserFormChange} className="w-full px-4 py-2.5 text-sm dark-input" />
+              <input id="user-name" required value={userForm.name} onChange={(e) => setUserForm((v) => ({ ...v, name: e.target.value }))} className="w-full px-4 py-2.5 text-sm dark-input" />
             </div>
             <div>
               <label htmlFor="user-email" className={labelClass} style={labelStyle}>Email</label>
-              <input id="user-email" name="email" type="email" required value={userForm.email}
-                onChange={handleUserFormChange} className="w-full px-4 py-2.5 text-sm dark-input" />
-            </div>
-            <div>
-              <label htmlFor="user-password" className={labelClass} style={labelStyle}>Temporary password</label>
-              <input id="user-password" name="password" type="password" minLength={8} required
-                value={userForm.password} onChange={handleUserFormChange}
-                className="w-full px-4 py-2.5 text-sm dark-input" placeholder="At least 8 characters" />
+              <input id="user-email" type="email" required value={userForm.email} onChange={(e) => setUserForm((v) => ({ ...v, email: e.target.value }))} className="w-full px-4 py-2.5 text-sm dark-input" />
             </div>
             <div>
               <label htmlFor="user-role" className={labelClass} style={labelStyle}>Role</label>
-              <select id="user-role" name="role" value={userForm.role} onChange={handleUserFormChange}
-                className="w-full px-4 py-2.5 text-sm dark-input">
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
+              <select id="user-role" value={userForm.role} onChange={(e) => setUserForm((v) => ({ ...v, role: e.target.value as StaffRole }))} className="w-full px-4 py-2.5 text-sm dark-input">
+                {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor="user-hospital" className={labelClass} style={labelStyle}>Hospital</label>
-              <select id="user-hospital" name="hospital_id" required value={userForm.hospital_id}
-                onChange={handleUserFormChange} className="w-full px-4 py-2.5 text-sm dark-input">
-                <option value="">Select hospital</option>
-                {hospitals.map((item) => (
-                  <option key={item.hospital_id} value={item.hospital_id}>{item.name}</option>
-                ))}
-              </select>
+              <label htmlFor="user-password" className={labelClass} style={labelStyle}>Initial password (optional)</label>
+              <input id="user-password" type="password" minLength={8} value={userForm.password ?? ''} placeholder="Leave empty to generate one"
+                onChange={(e) => setUserForm((v) => ({ ...v, password: e.target.value }))} className="w-full px-4 py-2.5 text-sm dark-input" />
             </div>
           </div>
-
-          <button type="submit" disabled={isCreatingUser} className="py-2.5 px-6 text-sm gradient-btn">
-            {isCreatingUser ? 'Creating...' : 'Create user'}
-          </button>
+          <p className="text-xs text-[color:var(--text-muted)]">The account is created at your hospital. The new user must set their own password at first sign-in.</p>
+          <button type="submit" disabled={busy} className="py-2.5 px-6 text-sm gradient-btn">Create account</button>
         </form>
+      </Card>
+      <Card title="Staff at this hospital">
+        {users.length === 0 ? <p className="text-sm py-4 text-[color:var(--text-muted)]">No staff accounts at this hospital yet.</p> : (
+        <table className="w-full text-sm" data-testid="staff-table">
+          <thead><tr>{['Name', 'Email', 'Role'].map((h) => <th key={h} className="text-left py-2 px-3 font-medium" style={thStyle}>{h}</th>)}</tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.user_id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <td className="py-2 px-3 text-[color:var(--text-primary)]">{u.name}</td>
+                <td className="py-2 px-3 text-[color:var(--text-secondary)]">{u.email}</td>
+                <td className="py-2 px-3 capitalize text-[color:var(--text-secondary)]">{u.role}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        )}
       </Card>
     </div>
   );
 
-  const renderTransfersTab = () => {
-    if (isLoadingTransfers) return <LoadingSpinner />;
-
-    return (
-      <div className="animate-fade-in">
-        <Card title="Transfer requests">
-          {transferError && <ErrorAlert message={transferError} />}
-          {transfers.length === 0 ? (
-            <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>No transfer requests.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Patient</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Source</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Destination</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Status</th>
-                    <th className="text-right py-3 px-4 font-medium" style={thStyle}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transfers.map((t) => (
-                    <tr
-                      key={t.id}
-                      className="dark-table-row"
-                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                    >
-                      <td className="py-3 px-4 font-medium" style={{ color: 'var(--text-primary)' }}>{t.patient_name}</td>
-                      <td className="py-3 px-4" style={{ color: 'var(--text-secondary)' }}>{t.source_hospital}</td>
-                      <td className="py-3 px-4" style={{ color: 'var(--text-secondary)' }}>{t.destination_hospital}</td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={t.status} />
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        {t.status === 'pending_authorization' || t.status === 'authorized' ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleTransferAction(
-                                t.id,
-                                t.status === 'pending_authorization' ? 'authorized' : 'approved',
-                              )}
-                              disabled={updatingTransferId === t.id}
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 disabled:opacity-50"
-                              style={{
-                                color: '#6ee7b7',
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                border: '1px solid rgba(16, 185, 129, 0.25)',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)';
-                                e.currentTarget.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.15)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                            >
-                              {t.status === 'pending_authorization' ? 'Authorize' : 'Approve'}
-                            </button>
-                            <button
-                              onClick={() => handleTransferAction(t.id, 'rejected')}
-                              disabled={updatingTransferId === t.id}
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 disabled:opacity-50"
-                              style={{
-                                color: '#fca5a5',
-                                background: 'rgba(239, 68, 68, 0.12)',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                                e.currentTarget.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.15)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>No actions</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
+  const renderLogs = () => (
+    <Card title="Audit log">
+      <div className="mb-4 flex items-center gap-3">
+        <label htmlFor="log-filter" className="text-sm text-[color:var(--text-muted)]">Show</label>
+        <select id="log-filter" value={logFilter} onChange={(e) => setLogFilter(e.target.value)} className="px-3 py-2 text-sm dark-input">
+          {LOG_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
       </div>
-    );
-  };
-
-  const renderLogsTab = () => {
-    if (isLoadingLogs) return <LoadingSpinner />;
-
-    return (
-      <div className="animate-fade-in">
-        <Card title="Audit log">
-          {logsError && <ErrorAlert message={logsError} />}
-          {auditLogs.length === 0 ? (
-            <p className="text-sm py-4" style={{ color: 'var(--text-muted)' }}>No log entries.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>User</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Role</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Action</th>
-                    <th className="text-left py-3 px-4 font-medium" style={thStyle}>Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLogs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className="dark-table-row"
-                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                    >
-                      <td className="py-3 px-4 font-medium" style={{ color: 'var(--text-primary)' }}>{log.user}</td>
-                      <td className="py-3 px-4 capitalize" style={{ color: 'var(--text-secondary)' }}>{log.role}</td>
-                      <td className="py-3 px-4" style={{ color: 'var(--text-secondary)' }}>{log.action}</td>
-                      <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-                        {new Date(log.timestamp).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {logs.length === 0 ? (
+        <p className="text-sm py-4 text-[color:var(--text-muted)]">No log entries{logFilter ? ' for this filter' : ''}.</p>
+      ) : (
+        <>
+          <AuditLogTable logs={logs} />
+          {hasMoreLogs && (
+            <button type="button" onClick={loadMoreLogs} className="mt-4 px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--border-input)', color: 'var(--text-secondary)' }}>
+              Load more
+            </button>
           )}
-        </Card>
-      </div>
-    );
-  };
-
-  const renderActiveTab = () => {
-    switch (activeTab) {
-      case 'status':
-        return renderStatusTab();
-      case 'users':
-        return renderUsersTab();
-      case 'transfers':
-        return renderTransfersTab();
-      case 'logs':
-        return renderLogsTab();
-    }
-  };
+        </>
+      )}
+    </Card>
+  );
 
   return (
     <DashboardShell>
       <div className="space-y-6">
         <h1 className="text-xl font-semibold gradient-text">Administration</h1>
 
-        {/* Tab navigation */}
         <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <nav className="flex gap-0 -mb-px">
+          <nav className="flex flex-wrap gap-0 -mb-px" role="tablist" aria-label="Administration">
             {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+              <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key} onClick={() => { setActiveTab(tab.key); setNotice(''); }}
                 className="px-5 py-3 text-sm font-medium transition-all duration-200 relative"
-                style={{
-                  color: activeTab === tab.key ? 'var(--text-accent)' : 'var(--text-muted)',
-                  borderBottom: activeTab === tab.key
-                    ? '2px solid transparent'
-                    : '2px solid transparent',
-                  backgroundImage: activeTab === tab.key ? 'none' : 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== tab.key) {
-                    e.currentTarget.style.color = 'var(--text-secondary)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== tab.key) {
-                    e.currentTarget.style.color = 'var(--text-muted)';
-                  }
-                }}
-              >
+                style={{ color: activeTab === tab.key ? 'var(--text-accent)' : 'var(--text-muted)' }}>
                 {tab.label}
                 {activeTab === tab.key && (
-                  <span
-                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                    style={{ background: 'var(--gradient-brand)' }}
-                  />
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: 'var(--gradient-brand)' }} />
                 )}
               </button>
             ))}
           </nav>
         </div>
 
-        {/* Tab content */}
-        {renderActiveTab()}
+        {error && <Alert kind="error" message={error} />}
+        {notice && <Alert kind="success" message={notice} />}
+        {loading ? <LoadingSpinner /> : (
+          <div className="animate-fade-in">
+            {activeTab === 'patients' && renderPatients()}
+            {activeTab === 'transfers' && renderTransfers()}
+            {activeTab === 'users' && renderUsers()}
+            {activeTab === 'logs' && renderLogs()}
+          </div>
+        )}
       </div>
+
+      <ConfirmDialog
+        open={pending !== null}
+        busy={busy}
+        confirmLabel={pending?.kind === 'create-user' ? 'Yes, create' : 'Yes, continue'}
+        onConfirm={confirmPending}
+        onCancel={() => setPending(null)}
+      >
+        {pending && confirmText(pending)}
+      </ConfirmDialog>
     </DashboardShell>
   );
 }

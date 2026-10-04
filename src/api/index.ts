@@ -1,24 +1,34 @@
 /** Live FastAPI facade and response adapters used by the React components. */
 import apiClient from './client';
+import { toSeverity } from '../contracts/severity';
 
 import type {
   AccidentTrend,
   AccidentForecast,
   AssociationRulesResponse,
+  GovernmentStatistics,
+  ModelKey,
+  ModelSummary,
+  AdminEpisode,
+  AdminPatientRow,
   AuditLog,
   AuthResponse,
+  CreatedUser,
   CreateUserPayload,
-  HospitalInfo,
+  NetworkHospital,
+  PagedList,
+  StaffUser,
   LoginCredentials,
   Patient,
   PatientIntakeForm,
-  Prognosis,
   Role,
-  Severity,
   TransferRequest,
-  TransferStatus,
   TreatmentPayload,
-  ModelPrediction,
+  DoctorEpisode,
+  DoctorWorkflowSummary,
+  ModelDecisionRequest,
+  SeverityDecisionRequest,
+  SeverityWorkflow,
   User,
   XAIExplanation,
 } from '../types';
@@ -46,6 +56,8 @@ interface BackendPatient {
 }
 
 interface BackendInjury {
+  /** 1 = primary injury, 2 = secondary injury. */
+  injury_order?: 1 | 2;
   site_of_injury: string | null;
   type_of_injury: string | null;
 }
@@ -64,9 +76,6 @@ interface BackendAccident {
   road_type?: string | null;
   Patient?: BackendPatient | BackendPatient[] | null;
   Injury_Description?: BackendInjury[] | BackendInjury | null;
-  severity_prediction?: BackendSeverityPrediction | null;
-  stay_duration_prediction?: BackendSeverityPrediction | null;
-  transfer_prediction?: BackendSeverityPrediction | null;
   mode_of_transport?: string | null;
   incident_at?: string | null;
   helmet_worn?: string | null;
@@ -78,54 +87,21 @@ interface BackendAccident {
   mode_of_travel_during_accident?: string | null;
   passenger_type?: string | null;
   other_injury?: string | null;
+  severity_workflow?: SeverityWorkflow;
+  doctor_workflow?: DoctorWorkflowSummary;
 }
 
-interface BackendSeverityPrediction {
-  prediction: string | null;
-  probability?: number | null;
-  completeness?: number;
-  status?: string;
-  confidence_level?: string | null;
-  probabilities?: Record<string, number>;
-  model_name?: string;
-  model_version?: string | null;
-  message?: string | null;
-}
-
+/** Saving intake runs no model; the response reports the stored Severity state. */
 interface BackendIntakeResponse {
   patient: BackendPatient;
   accident_record: BackendAccident;
   injuries: BackendInjury[];
-  severity_prediction: BackendSeverityPrediction;
-  stay_duration_prediction: BackendSeverityPrediction;
-  transfer_prediction: BackendSeverityPrediction;
+  severity: SeverityWorkflow;
 }
 
-interface BackendPrognosisResponse {
-  severity: BackendSeverityPrediction;
-  stay_duration: BackendSeverityPrediction;
-  transfer: BackendSeverityPrediction;
-  discharge: BackendSeverityPrediction;
-}
-
-interface BackendTransfer {
-  transfer_id: string;
-  accident_id: string | null;
-  from_hospital_id: string | null;
-  to_hospital_id: string | null;
-  status: string | null;
-  requested_at: string | null;
-  patient_name: string | null;
-  source_hospital: string | null;
-  destination_hospital: string | null;
-}
-
-interface BackendAuditLog {
-  log_id: string;
-  actor_id: string;
-  role: Role;
-  action_type: string;
-  timestamp: string | null;
+export interface IntakeResult {
+  patient: Patient;
+  severity: SeverityWorkflow;
 }
 
 function toUser(user: BackendUser): User {
@@ -138,9 +114,9 @@ function toUser(user: BackendUser): User {
     hospital_name: user.hospital_name
       ?? (user.role === 'government'
         ? 'Department of Health'
-        : user.role === 'admin' && !user.hospital_id
-          ? 'All hospitals'
-          : 'Assigned hospital'),
+        : user.hospital_id
+          ? 'Assigned hospital'
+          : 'No hospital assigned'),
   };
 }
 
@@ -150,42 +126,43 @@ function firstPatient(value: BackendAccident['Patient']): BackendPatient | undef
 }
 
 function injuriesFrom(value: BackendAccident['Injury_Description']): BackendInjury[] {
-  if (Array.isArray(value)) return value;
-  return value ? [value] : [];
+  const rows = Array.isArray(value) ? value : value ? [value] : [];
+  return [...rows].sort((left, right) => (left.injury_order ?? 0) - (right.injury_order ?? 0));
+}
+
+/** Primary and secondary injury picked by their stored order, never by list position. */
+function injurySlots(value: BackendAccident['Injury_Description']): [BackendInjury, BackendInjury] {
+  const empty: BackendInjury = { site_of_injury: null, type_of_injury: null };
+  const rows = injuriesFrom(value);
+  return [
+    rows.find((row) => row.injury_order === 1) ?? empty,
+    rows.find((row) => row.injury_order === 2) ?? empty,
+  ];
+}
+
+/** Injuries for the intake API, each tagged with its slot so a lone secondary stays secondary. */
+function injuryPayload(form: Partial<PatientIntakeForm>) {
+  return [
+    ...(form.site_of_injury || form.type_of_injury
+      ? [{
+          injury_order: 1,
+          site_of_injury: form.site_of_injury || null,
+          type_of_injury: form.type_of_injury || null,
+        }]
+      : []),
+    ...(form.secondary_site_of_injury || form.secondary_type_of_injury
+      ? [{
+          injury_order: 2,
+          site_of_injury: form.secondary_site_of_injury || null,
+          type_of_injury: form.secondary_type_of_injury || null,
+        }]
+      : []),
+  ];
 }
 
 function normalizeGender(value: string | null | undefined): Patient['gender'] {
   if (value === 'Male' || value === 'Female' || value === 'Other') return value;
   return 'Unknown';
-}
-
-function normalizeSeverity(value: string | null | undefined): Severity | null {
-  const normalized = value?.toLowerCase();
-  if (normalized === 'severe' || normalized === 'critical' || normalized === 'high') return 'High';
-  if (normalized === 'moderate' || normalized === 'borderline') return 'Moderate';
-  // "Severity not classified" covers low/minor and missing
-  return 'Severity not classified';
-}
-
-function toPrediction(
-  value: BackendSeverityPrediction | null | undefined,
-  modelName: string,
-): ModelPrediction {
-  const allowedStatuses = ['OK', 'LOW_CONFIDENCE', 'REFUSED', 'UNAVAILABLE', 'ERROR'] as const;
-  const status = allowedStatuses.find((item) => item === value?.status) ?? 'UNAVAILABLE';
-  return {
-    prediction: value?.prediction ?? null,
-    probability: value?.probability ?? null,
-    probabilities: value?.probabilities ?? {},
-    completeness: value?.completeness ?? 0,
-    status,
-    confidence_level: value?.confidence_level === 'high' || value?.confidence_level === 'low'
-      ? value.confidence_level
-      : null,
-    model_name: value?.model_name ?? modelName,
-    model_version: value?.model_version ?? null,
-    message: value?.message ?? null,
-  };
 }
 
 function injurySummary(injuries: BackendInjury[]): string {
@@ -207,12 +184,11 @@ function toPatient(
   severityValue?: string | null,
 ): Patient {
   const patient = patientOverride ?? firstPatient(accident.Patient);
-  const severity = normalizeSeverity(
-    severityValue ?? accident.severity_prediction?.prediction,
+  const workflow = accident.severity_workflow;
+  const severity = toSeverity(
+    severityValue
+      ?? (workflow ? workflow.final_severity ?? workflow.prediction?.prediction : undefined),
   );
-  const severityPrediction = toPrediction(accident.severity_prediction, 'severity');
-  const stayDurationPrediction = toPrediction(accident.stay_duration_prediction, 'stay_duration');
-  const transferPrediction = toPrediction(accident.transfer_prediction, 'transfer_probability');
   const injuries = injuriesFrom(accident.Injury_Description);
 
   return {
@@ -225,31 +201,14 @@ function toPatient(
     collision_type: accident.collision_with ?? accident.vehicle_type ?? 'Unknown',
     injury_description: injurySummary(injuries),
     severity,
-    priority: severity === 'High' ? 'High' : severity === 'Severity not classified' ? 'Low' : severity ? 'Medium' : null,
-    predicted_los: stayDurationPrediction.prediction,
-    severity_prediction: severityPrediction,
-    stay_duration_prediction: stayDurationPrediction,
-    transfer_prediction: transferPrediction,
     created_by: accident.created_by ?? '',
     hospital_id: accident.hospital_id ?? '',
+    severity_workflow: workflow,
+    doctor_workflow: accident.doctor_workflow,
   };
 }
 
 // Age bucketing is now handled on the backend.
-
-function normalizeTransferStatus(status: string | null): TransferStatus {
-  if (
-    status === 'authorized'
-    || status === 'approved'
-    || status === 'rejected'
-  ) return status;
-  return 'pending_authorization';
-}
-
-function shortId(value: string | null): string {
-  if (!value) return 'Unknown';
-  return value.length > 12 ? `${value.slice(0, 8)}…` : value;
-}
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
@@ -263,7 +222,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
 export async function submitPatientIntake(
   form: PatientIntakeForm,
   hospitalId: string,
-): Promise<Patient> {
+): Promise<IntakeResult> {
   const { data } = await apiClient.post<BackendIntakeResponse>('/patients/intake', {
     full_name: form.name,
     age: form.age === null ? null : form.age.toString(),
@@ -288,45 +247,31 @@ export async function submitPatientIntake(
     mode_of_travel_during_accident: form.mode_of_travel_during_accident || null,
     passenger_type: form.passenger_type || null,
     other_injury: form.other_injury || null,
-    injuries: [
-      ...(form.site_of_injury || form.type_of_injury
-        ? [{
-            site_of_injury: form.site_of_injury || null,
-            type_of_injury: form.type_of_injury || null,
-          }]
-        : []),
-      ...(form.secondary_site_of_injury || form.secondary_type_of_injury
-        ? [{
-            site_of_injury: form.secondary_site_of_injury || null,
-            type_of_injury: form.secondary_type_of_injury || null,
-          }]
-        : []),
-    ],
+    injuries: injuryPayload(form),
   });
 
-  return toPatient(
-    {
-      ...data.accident_record,
-      Injury_Description: data.injuries,
-      severity_prediction: data.severity_prediction,
-      stay_duration_prediction: data.stay_duration_prediction,
-      transfer_prediction: data.transfer_prediction,
-    },
-    data.patient,
-    data.severity_prediction.prediction,
-  );
+  return toIntakeResult(data);
 }
 
+function toIntakeResult(data: BackendIntakeResponse): IntakeResult {
+  return {
+    patient: toPatient(
+      { ...data.accident_record, Injury_Description: data.injuries, severity_workflow: data.severity },
+      data.patient,
+    ),
+    severity: data.severity,
+  };
+}
+
+/** Saves the given intake fields. The hospital is taken from the account by the backend. */
 export async function updatePatientIntake(
   accidentId: string,
   form: Partial<PatientIntakeForm>,
-  hospitalId: string,
-): Promise<Patient> {
-  const payload: any = {
+): Promise<IntakeResult> {
+  const payload: Record<string, unknown> = {
     full_name: form.name || undefined,
     age: form.age === null ? null : (form.age !== undefined ? form.age.toString() : undefined),
     gender: form.gender !== undefined ? (form.gender || null) : undefined,
-    hospital_id: hospitalId || null,
     mode_of_transport: form.mode_of_transport !== undefined ? (form.mode_of_transport || null) : undefined,
     time_to_hospital: form.time_to_hospital !== undefined ? (form.time_to_hospital || null) : undefined,
     collision_with: form.collision_type !== undefined ? (form.collision_type || null) : undefined,
@@ -347,59 +292,57 @@ export async function updatePatientIntake(
   };
 
   if (form.site_of_injury !== undefined || form.type_of_injury !== undefined || form.secondary_site_of_injury !== undefined || form.secondary_type_of_injury !== undefined) {
-    payload.injuries = [
-      ...(form.site_of_injury || form.type_of_injury
-        ? [{
-            site_of_injury: form.site_of_injury || null,
-            type_of_injury: form.type_of_injury || null,
-          }]
-        : []),
-      ...(form.secondary_site_of_injury || form.secondary_type_of_injury
-        ? [{
-            site_of_injury: form.secondary_site_of_injury || null,
-            type_of_injury: form.secondary_type_of_injury || null,
-          }]
-        : []),
-    ];
+    payload.injuries = injuryPayload(form);
   }
 
   const { data } = await apiClient.patch<BackendIntakeResponse>(`/patients/intake/${accidentId}`, payload);
 
-  return toPatient(
-    {
-      ...data.accident_record,
-      Injury_Description: data.injuries,
-      severity_prediction: data.severity_prediction,
-      stay_duration_prediction: data.stay_duration_prediction,
-      transfer_prediction: data.transfer_prediction,
-    },
-    data.patient,
-    data.severity_prediction.prediction,
-  );
+  return toIntakeResult(data);
 }
 
-export async function getMyPatients(): Promise<Patient[]> {
-  const { data } = await apiClient.get<BackendAccident[]>('/patients/my');
-  return data.map((accident) => toPatient(accident));
+export async function getSeverityStatus(accidentId: string): Promise<SeverityWorkflow> {
+  const { data } = await apiClient.get<SeverityWorkflow>(`/severity/accidents/${accidentId}`);
+  return data;
+}
+
+/** Runs the real Severity model on the saved inputs; 422 while required inputs are missing. */
+export async function runSeverity(accidentId: string): Promise<SeverityWorkflow> {
+  const { data } = await apiClient.post<SeverityWorkflow>(`/severity/accidents/${accidentId}/run`);
+  return data;
+}
+
+/** Records the nurse's final decision on the exact prediction shown on screen. */
+export async function decideSeverity(
+  predictionId: string,
+  decision: SeverityDecisionRequest,
+): Promise<SeverityWorkflow> {
+  const { data } = await apiClient.post<SeverityWorkflow>(
+    `/severity/predictions/${predictionId}/decision`,
+    decision,
+  );
+  return data;
+}
+
+/** Every patient record at the nurse's hospital (the backend path is /patients/my for historical reasons). */
+export const PAGE_SIZE = 50;
+
+/** A paged list request: the rows and the full size from the X-Total-Count header. */
+async function getPage<T>(path: string, offset: number): Promise<PagedList<T>> {
+  const response = await apiClient.get<T[]>(path, { params: { limit: PAGE_SIZE, offset } });
+  const header = Number(response.headers['x-total-count']);
+  return { rows: response.data, total: Number.isFinite(header) ? header : offset + response.data.length };
+}
+
+export async function getHospitalPatientRecords(offset = 0): Promise<PagedList<Patient>> {
+  const page = await getPage<BackendAccident>('/patients/my', offset);
+  return { rows: page.rows.map((accident) => toPatient(accident)), total: page.total };
 }
 
 // ── Doctor ──────────────────────────────────────────────────────────────────
 
-export async function getHospitalPatients(hospitalId: string): Promise<Patient[]> {
-  const { data } = await apiClient.get<BackendAccident[]>(
-    `/patients/hospital/${hospitalId}`,
-  );
-  return data.map((accident) => toPatient(accident));
-}
-
-export async function getPatientById(patientId: string): Promise<Patient | undefined> {
-  const { data } = await apiClient.get<BackendPatient>(`/patients/${patientId}`);
-  const accidents = data.accident_records ?? [];
-  const latest = [...accidents].sort((left, right) =>
-    (right.created_at ?? '').localeCompare(left.created_at ?? ''),
-  )[0];
-  if (!latest) return undefined;
-  return toPatient(latest, data);
+export async function getHospitalPatients(hospitalId: string, offset = 0): Promise<PagedList<Patient>> {
+  const page = await getPage<BackendAccident>(`/patients/hospital/${hospitalId}`, offset);
+  return { rows: page.rows.map((accident) => toPatient(accident)), total: page.total };
 }
 
 export async function getPatientDetail(patientId: string): Promise<{ patient: BackendPatient, accident: BackendAccident, injuries: BackendInjury[] }> {
@@ -412,20 +355,33 @@ export async function getPatientDetail(patientId: string): Promise<{ patient: Ba
   return {
     patient: data,
     accident: latest,
-    injuries: latest.Injury_Description as BackendInjury[] ?? []
+    injuries: injurySlots(latest.Injury_Description)
   };
 }
 
-export async function getPatientPrognosis(patientId: string): Promise<Prognosis> {
-  const { data } = await apiClient.get<BackendPrognosisResponse>(
-    `/patients/${patientId}/prognosis`,
+/** The doctor's view of one episode: Severity (read-only), treatment, the three doctor models, history. */
+export async function getDoctorEpisode(accidentId: string): Promise<DoctorEpisode> {
+  const { data } = await apiClient.get<DoctorEpisode>(`/doctor/accidents/${accidentId}`);
+  return data;
+}
+
+/** Runs the undecided doctor models whose inputs are complete; 422 while inputs are missing. */
+export async function runDoctorModels(accidentId: string): Promise<DoctorEpisode> {
+  const { data } = await apiClient.post<DoctorEpisode>(`/doctor/accidents/${accidentId}/run`);
+  return data;
+}
+
+/** Records the doctor's decision on the exact prediction shown on screen. */
+export async function decideDoctorModel(
+  accidentId: string,
+  predictionId: string,
+  decision: ModelDecisionRequest,
+): Promise<DoctorEpisode> {
+  const { data } = await apiClient.post<DoctorEpisode>(
+    `/doctor/accidents/${accidentId}/predictions/${predictionId}/decision`,
+    decision,
   );
-  return {
-    severity: toPrediction(data.severity, 'severity'),
-    stay_duration: toPrediction(data.stay_duration, 'stay_duration'),
-    transfer: toPrediction(data.transfer, 'transfer_probability'),
-    discharge: toPrediction(data.discharge, 'discharge_outcome'),
-  };
+  return data;
 }
 
 export async function createTreatment(payload: TreatmentPayload): Promise<void> {
@@ -454,60 +410,128 @@ export async function getExplanation(
 
 // ── Admin ───────────────────────────────────────────────────────────────────
 
-export async function getHospital(hospitalId: string): Promise<HospitalInfo> {
-  const { data } = await apiClient.get<HospitalInfo>(`/admin/hospitals/${hospitalId}`);
+/** The admin's patients: basics, Stay and Transfer predictions, open transfer. */
+export async function getAdminPatients(offset = 0): Promise<PagedList<AdminPatientRow>> {
+  return getPage<AdminPatientRow>('/admin/patients', offset);
+}
+
+/** One episode, read-only: basics, hospital stays, Stay/Transfer predictions, transfers. */
+export async function getAdminEpisode(accidentId: string): Promise<AdminEpisode> {
+  const { data } = await apiClient.get<AdminEpisode>(`/admin/episodes/${accidentId}`);
   return data;
 }
 
-export async function getHospitals(): Promise<HospitalInfo[]> {
-  const { data } = await apiClient.get<HospitalInfo[]>('/admin/hospitals');
+export async function getNetworkHospitals(): Promise<NetworkHospital[]> {
+  const { data } = await apiClient.get<NetworkHospital[]>('/admin/network-hospitals');
   return data;
 }
 
-export function getAdmittedPatients(hospitalId: string): Promise<Patient[]> {
-  return getHospitalPatients(hospitalId);
+export async function getStaffUsers(): Promise<StaffUser[]> {
+  const { data } = await apiClient.get<StaffUser[]>('/admin/users');
+  return data;
 }
 
-export async function createUser(payload: CreateUserPayload): Promise<User> {
-  const { data } = await apiClient.post<BackendUser>('/admin/users', payload);
-  return toUser(data);
+/** Creates a staff account at the admin's own hospital (the backend sets the hospital). */
+export async function createUser(payload: CreateUserPayload): Promise<CreatedUser> {
+  const { data } = await apiClient.post<CreatedUser>('/admin/users', {
+    ...payload,
+    password: payload.password || undefined,
+  });
+  return data;
 }
 
-export async function getTransferRequests(): Promise<TransferRequest[]> {
-  const { data } = await apiClient.get<BackendTransfer[]>('/admin/transfers');
-  return data.map((transfer) => ({
-    id: transfer.transfer_id,
-    patient_name: transfer.patient_name ?? `Accident ${shortId(transfer.accident_id)}`,
-    source_hospital: transfer.source_hospital ?? shortId(transfer.from_hospital_id),
-    destination_hospital: transfer.destination_hospital ?? shortId(transfer.to_hospital_id),
-    status: normalizeTransferStatus(transfer.status),
-    requested_date: transfer.requested_at?.slice(0, 10) ?? 'Unknown',
-  }));
+export async function getTransferRequests(offset = 0): Promise<PagedList<TransferRequest>> {
+  return getPage<TransferRequest>('/admin/transfers', offset);
 }
 
-export async function updateTransferStatus(
-  id: string,
-  status: TransferStatus,
+export async function createTransferRequest(
+  accidentId: string,
+  toHospitalId: string,
+  message: string,
 ): Promise<TransferRequest> {
-  await apiClient.patch(`/admin/transfers/${id}/status`, { status });
-  const transfers = await getTransferRequests();
-  const updated = transfers.find((transfer) => transfer.id === id);
-  if (!updated) throw new Error('Updated transfer was not returned by the API.');
-  return updated;
+  const { data } = await apiClient.post<TransferRequest>('/admin/transfers', {
+    accident_id: accidentId,
+    to_hospital_id: toHospitalId,
+    message,
+  });
+  return data;
 }
 
-export async function getAuditLogs(): Promise<AuditLog[]> {
-  const { data } = await apiClient.get<BackendAuditLog[]>('/admin/audit-logs');
-  return data.map((log) => ({
-    id: log.log_id,
-    user: shortId(log.actor_id),
-    role: log.role,
-    action: log.action_type.split('_').join(' '),
-    timestamp: log.timestamp ?? new Date(0).toISOString(),
-  }));
+export async function authorizeTransfer(transferId: string, note?: string): Promise<TransferRequest> {
+  const { data } = await apiClient.post<TransferRequest>(`/admin/transfers/${transferId}/authorize`, note ? { note } : {});
+  return data;
+}
+
+export async function rejectTransfer(transferId: string, reason: string): Promise<TransferRequest> {
+  const { data } = await apiClient.post<TransferRequest>(`/admin/transfers/${transferId}/reject`, { reason });
+  return data;
+}
+
+export interface AuditLogQuery {
+  action?: string;
+  accidentId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function getAuditLogs(query: AuditLogQuery = {}): Promise<AuditLog[]> {
+  const { data } = await apiClient.get<AuditLog[]>('/admin/audit-logs', {
+    params: {
+      action: query.action || undefined,
+      accident_id: query.accidentId || undefined,
+      limit: query.limit,
+      offset: query.offset,
+    },
+  });
+  return data;
+}
+
+// ── Nurse: transfer requests ────────────────────────────────────────────────
+
+export async function getNurseTransferRequests(): Promise<TransferRequest[]> {
+  const { data } = await apiClient.get<TransferRequest[]>('/patients/transfer-requests');
+  return data;
+}
+
+export async function getTransferStates(): Promise<string[]> {
+  const { data } = await apiClient.get<string[]>('/patients/transfer-states');
+  return data;
+}
+
+/** Records whether an authorized transfer physically happened. */
+export async function processTransferRequest(
+  transferId: string,
+  body: { outcome: 'transferred'; state_of_transfer: string; note?: string } | { outcome: 'not_transferred'; note: string },
+): Promise<TransferRequest> {
+  const { data } = await apiClient.post<TransferRequest>(`/patients/transfer-requests/${transferId}/process`, body);
+  return data;
+}
+
+// ── Auth: first sign-in password change ─────────────────────────────────────
+
+export const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED';
+
+export async function changePassword(email: string, currentPassword: string, newPassword: string): Promise<void> {
+  await apiClient.post('/auth/change-password', {
+    email,
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
 }
 
 // ── Government ──────────────────────────────────────────────────────────────
+
+/** Network-wide statistics: counts of records and operational transfer requests by status. */
+export async function getGovernmentStatistics(): Promise<GovernmentStatistics> {
+  const { data } = await apiClient.get<GovernmentStatistics>('/government/statistics');
+  return data;
+}
+
+/** Aggregate statistics for one patient model, across every hospital. */
+export async function getModelSummary(model: ModelKey): Promise<ModelSummary> {
+  const { data } = await apiClient.get<ModelSummary>(`/government/models/${model}`);
+  return data;
+}
 
 export async function getAccidentTrends(): Promise<AccidentTrend[]> {
   const { data } = await apiClient.get<AccidentTrend[]>('/government/accident-trends');

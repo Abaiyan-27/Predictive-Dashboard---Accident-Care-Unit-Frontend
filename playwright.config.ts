@@ -1,4 +1,10 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+
+// Live-backend specs read TEST_* account credentials from the environment;
+// a local, untracked .env.test can supply them (see .env.test.example).
+// Values already set in the shell win.
+if (existsSync('.env.test')) process.loadEnvFile('.env.test');
 
 export default defineConfig({
   testDir: './tests/e2e',
