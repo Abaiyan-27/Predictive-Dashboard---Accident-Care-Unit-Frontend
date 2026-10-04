@@ -47,7 +47,7 @@ function episode(overrides: Record<string, unknown> = {}) {
     },
     treatment: { records: [{ treatment_id: 't1', number_of_days_stay: 1, investigation_done: 'mri scan',
       management_name_1: 'only medicine and discharge', management_name_2: 'strict bed rest', created_at: '2026-10-03T09:30:00Z' }],
-      recorded: true, locked: false, lock_reason: null, can_record: true },
+      recorded: true, locked: false, lock_reason: null, can_record: false },
     models: {
       stay_duration: model('stay_duration', 'Stay Duration', ['0-1 days', '2-3 days', '4+ days'], '2-3 days', IDS.stay_duration),
       transfer: model('transfer', 'Transfer', ['Transfer', 'No transfer'], 'Transfer', IDS.transfer),
@@ -61,7 +61,8 @@ function episode(overrides: Record<string, unknown> = {}) {
 
 interface Mock { requests: Request[]; episode: ReturnType<typeof episode>; gets: number; decisionStatus: number }
 
-async function setUp(page: Page, initial = episode()): Promise<Mock> {
+/** Opens one page of the episode: '' (overview), 'severity', 'stay', 'transfer' or 'discharge'. */
+async function setUp(page: Page, initial = episode(), section = ''): Promise<Mock> {
   const mock: Mock = { requests: [], episode: initial, gets: 0, decisionStatus: 201 };
   await page.addInitScript((token) => {
     localStorage.setItem('ac_token', token);
@@ -107,12 +108,11 @@ async function setUp(page: Page, initial = episode()): Promise<Mock> {
       }
       return json(mock.episode, 201);
     }
-    if (method === 'POST' && path === '/treatments') return json({ treatment_id: 't2' }, 201);
     if (method === 'POST' && path === '/xai/explain') return json({ model: 'stay_duration', doctor_explanation: ['Why: test'] });
     return json({ detail: `unmocked ${method} ${path}` }, 404);
   });
-  await page.goto(`/doctor/episodes/${ACCIDENT}`);
-  await expect(page.getByTestId('model-stay_duration')).toBeVisible();
+  await page.goto(`/doctor/episodes/${ACCIDENT}${section ? `/${section}` : ''}`);
+  await expect(page.getByTestId('episode-nav')).toBeVisible();
   return mock;
 }
 
@@ -122,7 +122,7 @@ const posted = (mock: Mock) => mock.requests.map((r) => `${r.method()} ${new URL
 
 test.describe('Doctor model decisions', () => {
   test('severity is shown read-only with the nurse decision and its source', async ({ page }) => {
-    await setUp(page);
+    await setUp(page, episode(), 'severity');
     const severity = page.getByTestId('doctor-severity');
     await expect(severity).toContainText('Read-only');
     await expect(severity).toContainText('Model prediction:HIGH');
@@ -132,18 +132,25 @@ test.describe('Doctor model decisions', () => {
     await expect(severity.locator('input, select')).toHaveCount(0);
   });
 
-  test('all three doctor predictions are shown', async ({ page }) => {
+  test('each doctor model has its own page with its prediction', async ({ page }) => {
     await setUp(page);
-    await expect(page.getByTestId('prediction-stay_duration')).toHaveText('2-3 days');
-    await expect(page.getByTestId('prediction-transfer')).toHaveText('Transfer');
-    await expect(page.getByTestId('prediction-discharge')).toHaveText('Partial recovery');
-    for (const key of ['stay_duration', 'transfer', 'discharge']) {
+    const overview = page.getByTestId('model-overview');
+    await expect(overview).toContainText('2-3 days');
+    await expect(overview).toContainText('Partial recovery');
+    for (const [link, key, label] of [['Stay Duration', 'stay_duration', '2-3 days'], ['Transfer', 'transfer', 'Transfer'],
+      ['Discharge', 'discharge', 'Partial recovery']] as const) {
+      await page.getByTestId('episode-nav').getByRole('link', { name: link, exact: true }).click();
+      await expect(page.getByTestId(`prediction-${key}`)).toHaveText(label);
       await expect(panel(page, key)).toContainText('Do you want to accept this decision?');
+      // Only this model is on its page.
+      for (const other of ['stay_duration', 'transfer', 'discharge'].filter((k) => k !== key)) {
+        await expect(panel(page, other)).toHaveCount(0);
+      }
     }
   });
 
   test('accept waits for confirmation and targets the displayed prediction', async ({ page }) => {
-    const mock = await setUp(page);
+    const mock = await setUp(page, episode(), 'stay');
     await panel(page, 'stay_duration').getByRole('button', { name: 'Accept', exact: true }).click();
     await expect(dialog(page)).toContainText('Are you sure?');
     await expect(dialog(page)).toContainText('2-3 days');
@@ -161,7 +168,7 @@ test.describe('Doctor model decisions', () => {
   });
 
   test('override offers only valid labels other than the model\'s, then confirms', async ({ page }) => {
-    const mock = await setUp(page);
+    const mock = await setUp(page, episode(), 'transfer');
     const transfer = panel(page, 'transfer');
     await transfer.getByRole('button', { name: 'Reject / Make my own decision' }).click();
     const options = transfer.locator('input[type="radio"]');
@@ -184,6 +191,7 @@ test.describe('Doctor model decisions', () => {
       ['stay_duration', ['0-1 days', '4+ days']],
       ['discharge', ['Complete recovery', 'Further interventions']],
     ] as const) {
+      await page.goto(`/doctor/episodes/${ACCIDENT}/${key === 'stay_duration' ? 'stay' : key}`);
       await panel(page, key).getByRole('button', { name: 'Reject / Make my own decision' }).click();
       const values = await panel(page, key).locator('input[type="radio"]')
         .evaluateAll((nodes) => nodes.map((n) => (n as HTMLInputElement).value));
@@ -192,7 +200,7 @@ test.describe('Doctor model decisions', () => {
   });
 
   test('a stale-prediction conflict shows the error and reloads the current prediction', async ({ page }) => {
-    const mock = await setUp(page);
+    const mock = await setUp(page, episode(), 'stay');
     mock.decisionStatus = 409;
     const before = mock.gets;
     await panel(page, 'stay_duration').getByRole('button', { name: 'Accept', exact: true }).click();
@@ -202,20 +210,14 @@ test.describe('Doctor model decisions', () => {
     await expect(page.getByTestId('prediction-stay_duration')).toHaveText('4+ days');
   });
 
-  test('treatment is saved only after confirmation and without a hospital id', async ({ page }) => {
+  test('treatment is shown read-only: the doctor enters no model input', async ({ page }) => {
     const mock = await setUp(page);
-    await page.fill('#days', '3');
-    await page.selectOption('#investigation', 'x-ray');
-    await page.selectOption('#management1', 'surgery');
-    await page.getByRole('button', { name: 'Save treatment' }).click();
-    await expect(dialog(page)).toContainText('Are you sure?');
+    const treatment = page.getByTestId('doctor-treatment');
+    await expect(treatment).toContainText('Read-only');
+    await expect(treatment).toContainText('mri scan');
+    await expect(treatment.locator('input, select, textarea, button')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save treatment' })).toHaveCount(0);
     expect(mock.requests).toHaveLength(0);
-    await dialog(page).getByRole('button', { name: 'Yes, save' }).click();
-    await expect(page.getByRole('status')).toContainText('Treatment saved');
-    expect(posted(mock)).toEqual(['POST /api/treatments']);
-    const body = mock.requests[0].postDataJSON();
-    expect(body).toMatchObject({ accident_id: ACCIDENT, number_of_days_stay: 3, investigation_done: 'x-ray', management_name_1: 'surgery' });
-    expect(body).not.toHaveProperty('hospital_id');
   });
 
   test('decided and locked states show the final decision and no actions', async ({ page }) => {
@@ -226,17 +228,22 @@ test.describe('Doctor model decisions', () => {
         decided_by: 'doctor-1', decided_at: null, reason: null, model_prediction: 'Transfer' } } as never;
     decided.treatment = { ...decided.treatment, locked: true, can_record: false,
       lock_reason: 'A doctor-model decision has been recorded; new treatment would change the inputs it was based on.' };
-    await setUp(page, decided);
+    await setUp(page, decided, 'transfer');
     await expect(page.getByTestId('final-transfer')).toHaveText('No transfer');
     await expect(panel(page, 'transfer').getByRole('button', { name: /Accept|Reject/ })).toHaveCount(0);
+    await page.getByTestId('episode-nav').getByRole('link', { name: 'Overview' }).click();
     await expect(page.getByRole('button', { name: 'Save treatment' })).toHaveCount(0);
     await expect(page.getByText(/Locked — A doctor-model decision/)).toBeVisible();
   });
 
   test('the doctor list shows severity and each model, and no retired terminology anywhere', async ({ page }) => {
     await setUp(page);
-    for (const retired of ['Priority', 'Moderate', 'Medium', 'Severity not classified']) {
-      expect(await page.locator('body').innerText()).not.toContain(retired);
+    for (const section of ['', '/severity', '/stay', '/transfer', '/discharge']) {
+      await page.goto(`/doctor/episodes/${ACCIDENT}${section}`);
+      await expect(page.getByTestId('episode-nav')).toBeVisible();
+      for (const retired of ['Priority', 'Moderate', 'Medium', 'Severity not classified']) {
+        expect(await page.locator('body').innerText()).not.toContain(retired);
+      }
     }
     await page.goto('/doctor');
     const row = page.getByRole('button', { name: /Treated Patient/ });
@@ -252,10 +259,24 @@ test.describe('Doctor model decisions', () => {
 });
 
 test.describe('Doctor episode layout', () => {
-  test('the episode reads Patient → Severity → Treatment → Stay → Transfer → Discharge → History', async ({ page }) => {
+  test('one page per model: Overview, Severity, Stay Duration, Transfer, Discharge', async ({ page }) => {
     await setUp(page);
-    const headings = await page.locator('main h2').allInnerTexts();
-    expect(headings).toEqual(['Patient', 'Severity', 'Treatment', 'Stay Duration', 'Transfer', 'Discharge Outcome', 'History']);
+    const nav = page.getByTestId('episode-nav');
+    await expect(nav.getByRole('link')).toHaveText(['Overview', 'Severity', 'Stay Duration', 'Transfer', 'Discharge']);
+    await expect(page.locator('main h2')).toHaveText(['Patient', 'Treatment', 'Models']);
+    const pages: [string, RegExp, string[]][] = [
+      ['Severity', /\/severity$/, ['Severity', 'Severity history']],
+      ['Stay Duration', /\/stay$/, ['Stay Duration', 'Stay Duration history']],
+      ['Transfer', /\/transfer$/, ['Transfer', 'Transfer history']],
+      ['Discharge', /\/discharge$/, ['Discharge Outcome', 'Discharge Outcome history']],
+    ];
+    for (const [link, url, headings] of pages) {
+      await nav.getByRole('link', { name: link, exact: true }).click();
+      await expect(page).toHaveURL(url);
+      await expect(page.locator('main h2')).toHaveText(headings);
+    }
+    await nav.getByRole('link', { name: 'Overview' }).click();
+    await expect(page).toHaveURL(new RegExp(`/doctor/episodes/${ACCIDENT}$`));
     // Accident details are one click away, not on the first screen.
     await expect(page.getByText('Collision with')).toBeHidden();
     await page.getByText('Accident details').click();
@@ -272,25 +293,33 @@ test.describe('Doctor episode layout', () => {
         { prediction_id: 'h3', model_key: 'discharge', status: 'ERROR', prediction: null, trigger_event: 'treatment_recorded',
           predicted_at: '2026-10-03T10:00:00Z', decisions: [] },
       ] } }));
-    const history = page.getByTestId('prediction-history');
-    await expect(history.locator('th')).toHaveText(['Model', 'Model prediction', 'Date / time', 'Decision', 'Decision source']);
-    const stay = history.locator('tbody tr').nth(0).locator('td');
-    await expect(stay.nth(0)).toHaveText('Stay Duration');
-    await expect(stay.nth(1)).toHaveText('2-3 days');
-    await expect(stay.nth(3)).toHaveText('4+ days');
-    await expect(stay.nth(4)).toHaveText('Doctor override');
-    await expect(history.locator('tbody tr').nth(1)).toContainText('Nurse override');
-    await expect(history.locator('tbody tr').nth(2)).toContainText('No prediction (ERROR)');
-    await expect(history.locator('input, select, button')).toHaveCount(0);
+    // Transfer requests are on the overview.
     await expect(page.getByText('Authorized — awaiting transfer')).toBeVisible();
     await expect(page.locator('main')).not.toContainText('pending_authorization');
+
+    // Each model page lists only its own predictions.
+    const nav = page.getByTestId('episode-nav');
+    await nav.getByRole('link', { name: 'Stay Duration' }).click();
+    const history = page.getByTestId('prediction-history');
+    await expect(history.locator('th')).toHaveText(['Model prediction', 'Date / time', 'Decision', 'Decision source']);
+    await expect(history.locator('tbody tr')).toHaveCount(1);
+    const stay = history.locator('tbody tr').nth(0).locator('td');
+    await expect(stay.nth(0)).toHaveText('2-3 days');
+    await expect(stay.nth(2)).toHaveText('4+ days');
+    await expect(stay.nth(3)).toHaveText('Doctor override');
+    await expect(history.locator('input, select, button')).toHaveCount(0);
+    await nav.getByRole('link', { name: 'Severity' }).click();
+    await expect(page.getByTestId('prediction-history').locator('tbody tr')).toHaveCount(1);
+    await expect(page.getByTestId('prediction-history')).toContainText('Nurse override');
+    await nav.getByRole('link', { name: 'Discharge' }).click();
+    await expect(page.getByTestId('prediction-history')).toContainText('No prediction (ERROR)');
   });
 
   test('an out-of-date prediction is labelled and cannot be accepted', async ({ page }) => {
     const stale = episode();
     stale.models.transfer = { ...stale.models.transfer, state: 'NOT_RUN', can_accept: false, can_override: false,
       prediction: { ...stale.models.transfer.prediction, stale: true, stale_reason: 'A transfer request is open for this patient.' } };
-    await setUp(page, stale);
+    await setUp(page, stale, 'transfer');
     const transfer = panel(page, 'transfer');
     await expect(transfer.getByTestId('stale-notice')).toContainText('Out of date — new prediction required');
     await expect(transfer.getByTestId('stale-notice')).toContainText('A transfer request is open for this patient.');
@@ -304,7 +333,7 @@ test.describe('Doctor episode layout', () => {
       decision: { decision_id: 'd', prediction_id: IDS.stay_duration, final_decision: '4+ days', decision_source: 'DOCTOR',
         decided_by: 'doctor-1', decided_at: null, reason: 'Long rehab', model_prediction: '2-3 days' } as never,
       final_decision: '4+ days' as never };
-    await setUp(page, decided);
+    await setUp(page, decided, 'stay');
     const box = page.getByTestId('decided-stay_duration');
     await expect(box).toContainText('Model prediction:2-3 days');
     await expect(box).toContainText('Doctor decision:4+ days');

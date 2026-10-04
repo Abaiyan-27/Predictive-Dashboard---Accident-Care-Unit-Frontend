@@ -7,10 +7,10 @@ test.describe('Government Analytics Workflow', () => {
   });
 
   test('Government dashboard loads analytics components', async ({ page }) => {
-    await expect(page.locator('h1:has-text("Network overview")')).toBeVisible();
-
-    // Trends and charts live on the Forecast page.
-    await page.getByRole('link', { name: 'Forecast' }).first().click();
+    // Government opens on the Forecast page; only Forecast and Association Rules exist.
+    await expect(page).toHaveURL(/\/government\/forecast$/);
+    await expect(page.locator('h1:has-text("Accident forecast")')).toBeVisible();
+    await expect(page.getByTestId('government-nav').getByRole('link')).toHaveText(['Forecast', 'Association Rules']);
     await expect(page.locator('text=Historical monthly accident trends').first()).toBeVisible();
     await expect(page.locator('.recharts-wrapper').first()).toBeVisible({ timeout: 15000 });
   });

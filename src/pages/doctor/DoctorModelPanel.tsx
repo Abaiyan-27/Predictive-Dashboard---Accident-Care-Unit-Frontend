@@ -59,7 +59,7 @@ export function DoctorModelPanel({
         {state === 'WAITING_FOR_INPUTS' && (
           <p className="text-sm text-[color:var(--text-muted)]">
             {readiness.missing_required.length > 0
-              ? `Record treatment first. Missing: ${readiness.missing_required.join(', ')}.`
+              ? `Waiting for a nurse to record treatment. Missing: ${readiness.missing_required.join(', ')}.`
               : `Not enough patient details yet (${Math.round((readiness.completeness ?? 0) * 100)}% of `
                 + `${Math.round((readiness.minimum_completeness ?? 0) * 100)}% needed). Missing: `
                 + `${readiness.missing_features.join(', ')}.`}

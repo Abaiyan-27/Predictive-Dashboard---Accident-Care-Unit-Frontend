@@ -40,7 +40,7 @@ function PredictionCard({ view, testId }: { view: AdminPredictionView; testId: s
         </>
       ) : (
         <p className="mt-1 text-sm text-[color:var(--text-muted)]">
-          {view.state === 'WAITING_FOR_INPUTS' ? 'Waiting for the doctor to record treatment' : 'No prediction yet'}
+          {view.state === 'WAITING_FOR_INPUTS' ? 'Waiting for a nurse to record treatment' : 'No prediction yet'}
         </p>
       )}
     </div>

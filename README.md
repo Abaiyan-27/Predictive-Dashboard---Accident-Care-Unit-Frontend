@@ -45,4 +45,5 @@ DEPLOYMENT.md describes the local stack.
 
 The dashboards support nurse intake and model assessments, doctor patient,
 treatment, and outcome views, administrator hospital/users/transfers/audit
-workflows, and real government trends plus artifact-backed forecasting.
+workflows, and, for government officers, only the accident forecast and the
+association rules.

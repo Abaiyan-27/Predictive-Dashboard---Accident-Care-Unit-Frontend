@@ -6,9 +6,6 @@ import type {
   AccidentTrend,
   AccidentForecast,
   AssociationRulesResponse,
-  GovernmentStatistics,
-  ModelKey,
-  ModelSummary,
   AdminEpisode,
   AdminPatientRow,
   AuditLog,
@@ -24,6 +21,7 @@ import type {
   Role,
   TransferRequest,
   TreatmentPayload,
+  TreatmentStatus,
   DoctorEpisode,
   DoctorWorkflowSummary,
   ModelDecisionRequest,
@@ -384,6 +382,13 @@ export async function decideDoctorModel(
   return data;
 }
 
+/** The nurse's view of an episode's treatment (every model input is entered by a nurse). */
+export async function getTreatmentStatus(accidentId: string): Promise<TreatmentStatus> {
+  const { data } = await apiClient.get<TreatmentStatus>(`/accidents/${accidentId}/treatment`);
+  return data;
+}
+
+/** Nurse records a treatment; the Stay, Transfer and Discharge models then run. */
 export async function createTreatment(payload: TreatmentPayload): Promise<void> {
   await apiClient.post('/treatments', {
     ...payload,
@@ -519,19 +524,7 @@ export async function changePassword(email: string, currentPassword: string, new
   });
 }
 
-// ── Government ──────────────────────────────────────────────────────────────
-
-/** Network-wide statistics: counts of records and operational transfer requests by status. */
-export async function getGovernmentStatistics(): Promise<GovernmentStatistics> {
-  const { data } = await apiClient.get<GovernmentStatistics>('/government/statistics');
-  return data;
-}
-
-/** Aggregate statistics for one patient model, across every hospital. */
-export async function getModelSummary(model: ModelKey): Promise<ModelSummary> {
-  const { data } = await apiClient.get<ModelSummary>(`/government/models/${model}`);
-  return data;
-}
+// ── Government: forecasting and association rules only ──────────────────────
 
 export async function getAccidentTrends(): Promise<AccidentTrend[]> {
   const { data } = await apiClient.get<AccidentTrend[]>('/government/accident-trends');

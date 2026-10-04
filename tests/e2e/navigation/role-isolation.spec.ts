@@ -12,7 +12,9 @@ function fakeToken(sub: string): string {
 
 const HOMES = { nurse: '/nurse', doctor: '/doctor', admin: '/admin', government: '/government' } as const;
 type Role = keyof typeof HOMES;
-const PAGES = ['/nurse', '/doctor', '/doctor/episodes/x', '/admin', '/admin/episodes/x', '/government', '/government/severity', '/government/forecast'];
+// Where each role lands: the Government area opens on its Forecast page.
+const LANDING: Record<Role, string> = { ...HOMES, government: '/government/forecast' };
+const PAGES = ['/nurse', '/doctor', '/doctor/episodes/x', '/admin', '/admin/episodes/x', '/government', '/government/forecast', '/government/associations'];
 
 async function signIn(page: Page, role: Role) {
   await page.addInitScript(({ token, role }) => {
@@ -33,8 +35,8 @@ for (const role of Object.keys(HOMES) as Role[]) {
     for (const path of PAGES) {
       await page.goto(path);
       const own = path.startsWith(HOMES[role]);
-      if (own) await expect(page).toHaveURL(new RegExp(`${path}$`));
-      else await expect(page).toHaveURL(new RegExp(`${HOMES[role]}$`));
+      const expected = !own ? LANDING[role] : path === HOMES[role] ? LANDING[role] : path;
+      await expect(page).toHaveURL(new RegExp(`${expected}$`));
     }
   });
 

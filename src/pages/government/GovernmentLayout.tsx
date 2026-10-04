@@ -1,17 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { DashboardShell } from '../../components/DashboardShell';
 
-const LINKS = [
-  { to: '/government', label: 'Overview', end: true },
-  { to: '/government/severity', label: 'Severity' },
-  { to: '/government/stay', label: 'Stay Duration' },
-  { to: '/government/transfer', label: 'Transfer' },
-  { to: '/government/discharge', label: 'Discharge' },
+const LINKS: { to: string; label: string; end?: boolean }[] = [
   { to: '/government/forecast', label: 'Forecast' },
   { to: '/government/associations', label: 'Association Rules' },
 ];
 
-/** Government pages: read-only, network-wide analytics, one model per page. */
+/** Government pages: accident forecasting and association-rule mining only (read-only). */
 export function GovernmentLayout() {
   return (
     <DashboardShell>

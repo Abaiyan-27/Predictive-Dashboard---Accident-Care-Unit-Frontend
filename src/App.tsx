@@ -7,9 +7,7 @@ import { DoctorDashboard } from './pages/doctor/DoctorDashboard';
 import { DoctorEpisodePage } from './pages/doctor/DoctorEpisodePage';
 import { AdminEpisodePage } from './pages/admin/AdminEpisodePage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { GovernmentDashboard } from './pages/government/GovernmentDashboard';
 import { GovernmentLayout } from './pages/government/GovernmentLayout';
-import { DischargePage, SeverityPage, StayDurationPage, TransferPage } from './pages/government/ModelPage';
 import { ForecastPage } from './pages/government/ForecastPage';
 import { AssociationRulesPage } from './pages/government/AssociationRulesPage';
 
@@ -41,7 +39,7 @@ export default function App() {
             }
           />
           <Route
-            path="/doctor/episodes/:accidentId"
+            path="/doctor/episodes/:accidentId/:section?"
             element={
               <ProtectedRoute allowedRoles={['doctor']}>
                 <DoctorEpisodePage />
@@ -67,7 +65,7 @@ export default function App() {
             }
           />
 
-          {/* Government: read-only analytics, one patient model per page */}
+          {/* Government: accident forecasting and association rules only (read-only) */}
           <Route
             path="/government"
             element={
@@ -76,14 +74,10 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<GovernmentDashboard />} />
-            <Route path="severity" element={<SeverityPage />} />
-            <Route path="stay" element={<StayDurationPage />} />
-            <Route path="transfer" element={<TransferPage />} />
-            <Route path="discharge" element={<DischargePage />} />
+            <Route index element={<Navigate to="forecast" replace />} />
             <Route path="forecast" element={<ForecastPage />} />
             <Route path="associations" element={<AssociationRulesPage />} />
-            <Route path="*" element={<Navigate to="/government" replace />} />
+            <Route path="*" element={<Navigate to="/government/forecast" replace />} />
           </Route>
 
           {/* Catch-all */}

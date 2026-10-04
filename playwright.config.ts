@@ -6,6 +6,10 @@ import { defineConfig, devices } from '@playwright/test';
 // Values already set in the shell win.
 if (existsSync('.env.test')) process.loadEnvFile('.env.test');
 
+// PLAYWRIGHT_PORT runs the app on another port, so a test run never reuses a
+// developer's dev server (whose /api proxy may point at a real backend).
+const PORT = Number(process.env.PLAYWRIGHT_PORT || 5173);
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -14,7 +18,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
   },
 
@@ -26,8 +30,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
+    command: `npm run dev -- --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },

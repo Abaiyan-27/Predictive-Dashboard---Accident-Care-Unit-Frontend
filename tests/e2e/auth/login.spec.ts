@@ -24,7 +24,8 @@ test.describe('Authentication Flow', () => {
 
   test('Valid login as government redirects to government dashboard', async ({ page }) => {
     await loginAsRole(page, 'government');
-    await expect(page.locator('h1', { hasText: 'Network overview' })).toBeVisible();
+    await expect(page).toHaveURL(/\/government\/forecast$/);
+    await expect(page.locator('h1', { hasText: 'Accident forecast' })).toBeVisible();
   });
 
   test('Invalid password displays error', async ({ page }) => {

@@ -23,6 +23,7 @@ import type { HumanSeverityDecision, Severity } from '../../contracts/severity';
 import type { Patient, PatientIntakeForm, SeverityWorkflow } from '../../types';
 import { SeverityPanel } from './SeverityPanel';
 import { TransferRequestsCard } from './TransferRequestsCard';
+import { TreatmentCard } from './TreatmentCard';
 
 // ── Dropdown Options ────────────────────────────────────────────────────────
 
@@ -575,6 +576,17 @@ export function NurseDashboard() {
                 </button>
               </form>
             </Card>
+          )}
+
+          {activeAccidentId && (
+            <TreatmentCard
+              accidentId={activeAccidentId}
+              onSaved={async () => {
+                // Treatment locks Box 3 (the doctor models' accident inputs): show the new locks.
+                try { setSeverity(await getSeverityStatus(activeAccidentId)); } catch { /* the card shows its own result */ }
+                await fetchHospitalPatients();
+              }}
+            />
           )}
         </div>
 

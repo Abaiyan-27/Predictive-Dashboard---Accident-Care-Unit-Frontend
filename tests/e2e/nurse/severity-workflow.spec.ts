@@ -60,10 +60,13 @@ const ACCIDENT_ROW = {
 interface Mock {
   requests: Request[];
   status: Record<string, unknown>;
+  treatment: Record<string, unknown>;
 }
 
+const NO_TREATMENT = { records: [], recorded: false, locked: false, lock_reason: null, can_record: true };
+
 async function setUp(page: Page, initialStatus: Record<string, unknown> = workflow()): Promise<Mock> {
-  const mock: Mock = { requests: [], status: initialStatus };
+  const mock: Mock = { requests: [], status: initialStatus, treatment: NO_TREATMENT };
   await page.addInitScript((token) => {
     localStorage.setItem('ac_token', token);
     localStorage.setItem('ac_user', JSON.stringify({
@@ -103,6 +106,14 @@ async function setUp(page: Page, initialStatus: Record<string, unknown> = workfl
       return json({ patient: ACCIDENT_ROW.Patient, accident_record: ACCIDENT_ROW, injuries: [], severity: mock.status });
     }
     if (method === 'POST' && path === `/severity/accidents/${ACCIDENT}/run`) return json(mock.status);
+    if (method === 'GET' && path === `/accidents/${ACCIDENT}/treatment`) return json(mock.treatment);
+    if (method === 'POST' && path === '/treatments') {
+      mock.treatment = { records: [{ treatment_id: 't1', number_of_days_stay: 3, investigation_done: 'x-ray',
+        management_name_1: 'surgery', management_name_2: null, created_at: '2026-10-03T11:00:00Z' }],
+      recorded: true, locked: false, lock_reason: null, can_record: true };
+      mock.status = { ...mock.status, locks: { ...(mock.status.locks as object), later_model_inputs: true } };
+      return json({ treatment_id: 't1' }, 201);
+    }
     if (method === 'POST' && path === `/severity/predictions/${PREDICTION}/decision`) {
       mock.status = ACCEPTED;
       return json(ACCEPTED, 201);
@@ -307,5 +318,40 @@ test.describe('Nurse dashboard consistency', () => {
     await page.getByRole('button', { name: 'Save & Run Severity' }).click();
     await dialog(page).getByRole('button', { name: 'Cancel' }).click();
     expect(mock.requests).toHaveLength(0);
+  });
+});
+
+test.describe('Nurse enters treatment', () => {
+  test('treatment is a nurse input: saved only after confirmation, without a hospital id, then Box 3 locks', async ({ page }) => {
+    const mock = await setUp(page);
+    await openPatient(page);
+    const box = page.getByTestId('nurse-treatment');
+    await expect(box).toContainText('No treatment recorded yet.');
+    await box.locator('#days').fill('3');
+    await box.locator('#investigation').selectOption('x-ray');
+    await box.locator('#management1').selectOption('surgery');
+    await box.getByRole('button', { name: 'Save treatment' }).click();
+    await expect(dialog(page)).toContainText('Are you sure?');
+    expect(mock.requests).toHaveLength(0);
+    await dialog(page).getByRole('button', { name: 'Yes, save' }).click();
+    await expect(box.getByRole('status')).toContainText('Treatment saved');
+    await expect(box).toContainText('x-ray · surgery');
+    const posted = mock.requests.map((r) => `${r.method()} ${new URL(r.url()).pathname}`);
+    expect(posted).toEqual(['POST /api/treatments']);
+    const body = mock.requests[0].postDataJSON();
+    expect(body).toMatchObject({ accident_id: ACCIDENT, number_of_days_stay: 3, investigation_done: 'x-ray', management_name_1: 'surgery' });
+    expect(body).not.toHaveProperty('hospital_id');
+    await expect(page.getByRole('button', { name: 'Save Other Inputs' })).toBeDisabled();
+  });
+
+  test('locked treatment shows the reason and no form', async ({ page }) => {
+    const mock = await setUp(page);
+    mock.treatment = { ...NO_TREATMENT, records: [{ treatment_id: 't1', number_of_days_stay: 1, investigation_done: 'mri scan',
+      management_name_1: 'surgery', management_name_2: null, created_at: null }], recorded: true, locked: true, can_record: false,
+      lock_reason: 'A doctor-model decision has been recorded; new treatment would change the inputs it was based on.' };
+    await openPatient(page);
+    const box = page.getByTestId('nurse-treatment');
+    await expect(box).toContainText('Locked — A doctor-model decision');
+    await expect(box.getByRole('button', { name: 'Save treatment' })).toHaveCount(0);
   });
 });

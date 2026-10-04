@@ -166,6 +166,15 @@ export interface TreatmentRecord {
   created_at: string | null;
 }
 
+/** An episode's treatment. Entered by a nurse (can_record is true only for nurses). */
+export interface TreatmentStatus {
+  records: TreatmentRecord[];
+  recorded: boolean;
+  locked: boolean;
+  lock_reason: string | null;
+  can_record: boolean;
+}
+
 export interface HistoryPrediction {
   prediction_id: string;
   model_key: string;
@@ -192,13 +201,7 @@ export interface DoctorEpisode {
     injuries: { injury_order?: number; site_of_injury: string | null; type_of_injury: string | null }[];
   };
   severity: SeverityWorkflow;
-  treatment: {
-    records: TreatmentRecord[];
-    recorded: boolean;
-    locked: boolean;
-    lock_reason: string | null;
-    can_record: boolean;
-  };
+  treatment: TreatmentStatus;
   models: Record<DoctorModelKey, DoctorModelStatus>;
   history: {
     episodes: { accident_id: string; created_at: string | null; status: string | null }[];
@@ -286,7 +289,7 @@ export interface PatientIntakeForm {
 
 export interface TreatmentPayload {
   accident_id: string;
-  /** Optional: the backend uses the doctor's own hospital. */
+  /** Optional: the backend uses the nurse's own hospital. */
   hospital_id?: string;
   ward_number?: string;
   reason?: string;
@@ -446,50 +449,6 @@ export interface AssociationRulesResponse {
 export interface PagedList<T> {
   rows: T[];
   total: number;
-}
-
-// ── Government model statistics (aggregate only) ────────────────────────────
-
-export type ModelKey = 'severity' | 'stay_duration' | 'transfer' | 'discharge';
-
-export interface LabelCount {
-  label: string;
-  count: number;
-  /** Null when there is nothing to divide by. */
-  percentage: number | null;
-}
-
-export interface ModelSummary {
-  model_key: ModelKey;
-  title: string;
-  labels: string[];
-  decision_labels: string[];
-  decision_role: 'nurse' | 'doctor';
-  total_predictions: number;
-  episodes_with_prediction: number;
-  current: LabelCount[];
-  /** Episodes whose latest run could not score (not an output label). */
-  unavailable: number;
-  decisions: {
-    total: number;
-    accepted: number;
-    overridden: number;
-    acceptance_rate: number | null;
-    distribution: LabelCount[];
-  };
-  monthly: { month: string; total: number; counts: Record<string, number> }[];
-  by_hospital: { hospital: string; total: number; counts: Record<string, number> }[];
-  versions: { contract_version: string | null; artifact_name: string | null; first_seen_at: string | null; predictions: number }[];
-  generated_at: string;
-}
-
-export interface GovernmentStatistics {
-  total_accidents: number;
-  total_patients: number;
-  total_hospitals: number;
-  total_transfers: number;
-  pending_transfers: number;
-  transfers_by_status: Record<TransferRequest['status'], number>;
 }
 
 // ── User creation ───────────────────────────────────────────────────────────

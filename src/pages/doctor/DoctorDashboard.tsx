@@ -117,7 +117,7 @@ export function DoctorDashboard() {
 
         <Card>
           <p className="mb-4 text-xs text-[color:var(--text-muted)]">
-            Select a patient to review the Severity decision, record treatment and decide on the Stay, Transfer and Discharge predictions.
+            Select a patient to review the Severity decision and the treatment (both entered by nurses) and to decide on the Stay, Transfer and Discharge predictions.
           </p>
           {error && (
             <div
