@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import logo from '../../Predictive Care Dashboard Logo.png';
+import { ConfirmDialog } from './ConfirmDialog';
 
 const ROLE_LABELS: Record<string, string> = {
   nurse: 'Nurse',
@@ -17,8 +19,13 @@ interface DashboardShellProps {
 export function DashboardShell({ children }: DashboardShellProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = () => {
+    setIsLoggingOut(true);
+  };
+
+  const confirmLogout = () => {
     logout();
     navigate('/login');
   };
@@ -91,6 +98,18 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
         {children}
       </main>
+
+      <ConfirmDialog
+        open={isLoggingOut}
+        title="Log out"
+        confirmLabel="Log out"
+        onConfirm={confirmLogout}
+        onCancel={() => setIsLoggingOut(false)}
+      >
+        <p style={{ color: 'var(--text-secondary)' }}>
+          Are you sure you want to log out?
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }

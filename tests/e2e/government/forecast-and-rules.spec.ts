@@ -172,7 +172,7 @@ test.describe('Forecast and association rules', () => {
     await expect(page.getByText('Helmet Worn: no')).toBeVisible();
     await expect(page.getByTestId('government-associations')).toContainText('not outputs of the Severity model');
     await page.getByRole('button', { name: '→ severity_label: high (dataset)' }).click();
-    await expect.poll(() => mock.gets.at(-1)).toBe('/government/association-rules?consequent=severity_label%3Dhigh&limit=100&sort_by=lift');
+    await expect.poll(() => mock.gets.at(-1)).toBe('/government/association-rules?consequent=severity_label%3Dhigh&limit=1000&sort_by=lift');
     await expectReadOnly(page, ['All rules', '→ severity_label: high (dataset)', '→ severity_label: low (dataset)', 'By lift', 'By confidence', 'By support']);
     onlyForecastAndRuleCalls(mock);
   });

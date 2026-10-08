@@ -201,8 +201,13 @@ function WorkflowBadge({ workflow }: { workflow?: SeverityWorkflow }) {
   return <span className="text-xs text-[color:var(--text-muted)]">{workflow ? SEVERITY_STATES[workflow.state] : 'Not yet run'}</span>;
 }
 
+type NurseTab = 'intake' | 'transfers' | 'patients';
+type IntakeTab = 'basic' | 'severity' | 'other' | 'treatment';
+
 export function NurseDashboard() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<NurseTab>('patients');
+  const [activeIntakeTab, setActiveIntakeTab] = useState<IntakeTab>('basic');
   const [form, setForm] = useState<PatientIntakeForm>({ ...EMPTY_FORM });
   // Values as last saved, so each box only sends its own fields.
   const [savedForm, setSavedForm] = useState<PatientIntakeForm>({ ...EMPTY_FORM });
@@ -286,6 +291,8 @@ export function NurseDashboard() {
       setSavedForm(loaded);
       setSeverity(workflow);
       resetOverride();
+      setActiveTab('intake');
+      setActiveIntakeTab('basic');
     } catch (error) {
       setErrorMsg(getApiErrorMessage(error, 'Failed to load patient details.'));
     }
@@ -300,6 +307,8 @@ export function NurseDashboard() {
     resetOverride();
     setErrorMsg('');
     setNoticeMsg('');
+    setActiveTab('intake');
+    setActiveIntakeTab('basic');
   };
 
   // ── Every save first asks "Are you sure?"; nothing is sent until confirmed ──
@@ -454,12 +463,31 @@ export function NurseDashboard() {
     <DashboardShell>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-xl font-semibold gradient-text">Patient intake</h1>
-          {activeAccidentId && (
+          <h1 className="text-xl font-semibold gradient-text">Nurse Dashboard</h1>
+          {activeTab !== 'intake' && (
             <button onClick={handleNewPatient} className="px-4 py-2 text-sm gradient-btn">
               + New Patient
             </button>
           )}
+        </div>
+
+        <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+          <nav className="flex flex-wrap gap-0 -mb-px" role="tablist">
+            {[
+              { key: 'patients', label: 'Hospital Patients' },
+              { key: 'transfers', label: 'Transfer Requests' },
+              { key: 'intake', label: activeAccidentId ? 'Patient Intake' : 'New Patient' },
+            ].map((tab) => (
+              <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key} onClick={() => { setActiveTab(tab.key as NurseTab); setErrorMsg(''); setNoticeMsg(''); }}
+                className="px-5 py-3 text-sm font-medium transition-all duration-200 relative"
+                style={{ color: activeTab === tab.key ? 'var(--text-accent)' : 'var(--text-muted)' }}>
+                {tab.label}
+                {activeTab === tab.key && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: 'var(--gradient-brand)' }} />
+                )}
+              </button>
+            ))}
+          </nav>
         </div>
 
         {errorMsg && (
@@ -473,29 +501,50 @@ export function NurseDashboard() {
           </div>
         )}
 
-        {/* Severity result and decision (nurses work with the Severity model only) */}
-        {activeAccidentId && severity && (
-          <SeverityPanel
-            patientName={activePatientName}
-            workflow={severity}
-            busy={busy}
-            overrideOpen={overrideOpen}
-            overrideChoice={overrideChoice}
-            overrideReason={overrideReason}
-            onRun={() => requestSeverity(true)}
-            onAccept={requestAccept}
-            onReject={() => setOverrideOpen(true)}
-            onCancelOverride={resetOverride}
-            onOverrideChoice={setOverrideChoice}
-            onOverrideReason={setOverrideReason}
-            onSaveOverride={requestOverride}
-          />
-        )}
+        {activeTab === 'intake' && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Severity result and decision (nurses work with the Severity model only) */}
+            {activeAccidentId && severity && (
+              <SeverityPanel
+                patientName={activePatientName}
+                workflow={severity}
+                busy={busy}
+                overrideOpen={overrideOpen}
+                overrideChoice={overrideChoice}
+                overrideReason={overrideReason}
+                onRun={() => requestSeverity(true)}
+                onAccept={requestAccept}
+                onReject={() => setOverrideOpen(true)}
+                onCancelOverride={resetOverride}
+                onOverrideChoice={setOverrideChoice}
+                onOverrideReason={setOverrideReason}
+                onSaveOverride={requestOverride}
+              />
+            )}
 
-        {/* Intake Forms */}
-        <div className="space-y-6">
+            <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <nav className="flex flex-wrap gap-0 -mb-px" role="tablist">
+                {[
+                  { key: 'basic', label: 'Basic Details' },
+                  { key: 'severity', label: 'Severity Inputs', disabled: !activeAccidentId },
+                  { key: 'other', label: 'Other Inputs', disabled: !activeAccidentId },
+                  { key: 'treatment', label: 'Treatment', disabled: !activeAccidentId },
+                ].map((tab) => (
+                  <button key={tab.key} type="button" role="tab" aria-selected={activeIntakeTab === tab.key} disabled={tab.disabled} onClick={() => setActiveIntakeTab(tab.key as IntakeTab)}
+                    className="px-5 py-3 text-sm font-medium transition-all duration-200 relative disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ color: activeIntakeTab === tab.key ? 'var(--text-accent)' : 'var(--text-muted)' }}>
+                    {tab.label}
+                    {activeIntakeTab === tab.key && !tab.disabled && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: 'var(--gradient-brand)' }} />
+                    )}
+                  </button>
+                ))}
+              </nav>
+            </div>
 
-          <Card title="Box 1: Basic Details">
+            <div className="space-y-6">
+              <div style={{ display: activeIntakeTab === 'basic' ? 'block' : 'none' }}>
+                <Card title="Box 1: Basic Details">
             <form onSubmit={requestBasic} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -521,7 +570,9 @@ export function NurseDashboard() {
               </button>
             </form>
           </Card>
+              </div>
 
+              <div style={{ display: activeIntakeTab === 'severity' ? 'block' : 'none' }}>
           {activeAccidentId && (
             <Card title="Box 2: Severity Prediction Inputs">
               <form onSubmit={(e) => { e.preventDefault(); requestSeverity(false); }} className="space-y-4">
@@ -554,7 +605,9 @@ export function NurseDashboard() {
               </form>
             </Card>
           )}
+              </div>
 
+              <div style={{ display: activeIntakeTab === 'other' ? 'block' : 'none' }}>
           {activeAccidentId && (
             <Card title="Box 3: Other Models Input">
               <form onSubmit={requestOther} className="space-y-4">
@@ -577,7 +630,9 @@ export function NurseDashboard() {
               </form>
             </Card>
           )}
+              </div>
 
+              <div style={{ display: activeIntakeTab === 'treatment' ? 'block' : 'none' }}>
           {activeAccidentId && (
             <TreatmentCard
               accidentId={activeAccidentId}
@@ -588,13 +643,22 @@ export function NurseDashboard() {
               }}
             />
           )}
-        </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-        {/* The hospital's patients, whichever nurse registered them */}
-        <TransferRequestsCard />
+        {activeTab === 'transfers' && (
+          <div className="animate-fade-in">
+            {/* The hospital's patients, whichever nurse registered them */}
+            <TransferRequestsCard />
+          </div>
+        )}
 
-        <Card title="Hospital patient records">
-          <p className="-mt-3 mb-4 text-xs text-[color:var(--text-muted)]">
+        {activeTab === 'patients' && (
+          <div className="animate-fade-in">
+            <Card title="Hospital patient records">
+              <p className="-mt-3 mb-4 text-xs text-[color:var(--text-muted)]">
             Every patient at your hospital, whichever nurse registered them. Select a patient to continue their record.
           </p>
           {isLoadingPatients ? (
@@ -616,6 +680,8 @@ export function NurseDashboard() {
           )}
           {!isLoadingPatients && <ListFooter shown={hospitalPatients.length} total={patientTotal} loading={loadingMore} onMore={loadMorePatients} noun="patient records" />}
         </Card>
+          </div>
+        )}
       </div>
 
       <ConfirmDialog

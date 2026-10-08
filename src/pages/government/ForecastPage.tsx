@@ -61,14 +61,9 @@ export function ForecastPage() {
   return (
     <div className="space-y-6" data-testid="government-forecast">
       <div>
-        <h1 className="text-xl font-semibold gradient-text">Accident forecast</h1>
-        <p className="mt-2 text-sm text-[color:var(--text-secondary)] max-w-3xl">
-          Monthly accident counts and a seasonal-naive forecast: each future month repeats the value of the same
-          month in the historical data. It is a statistical baseline for accident volume, not one of the patient
-          prediction models, and its Low / Medium / High bands describe monthly accident volume only.
-        </p>
+        <h1 className="text-xl font-semibold gradient-text">Accident Forecast</h1>
       </div>
-        <Card title="Historical monthly accident trends — notebook dataset">
+        <Card title="Historical Monthly Accident Trends -- (June 2020 - June 2022)">
           {isLoadingHistoricalTrends ? (
             <LoadingSpinner />
           ) : historicalTrendsError ? (
@@ -196,50 +191,31 @@ export function ForecastPage() {
                   })}
                 </div>
               )}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-left py-3 px-4 font-medium" style={thStyle}>Month</th>
-                      <th className="text-right py-3 px-4 font-medium" style={thStyle}>Predicted accidents</th>
-                      <th className="text-center py-3 px-4 font-medium" style={thStyle}>Volume band</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {forecast.points.map((point) => {
-                      const riskStyle = point.risk_level ? RISK_BADGE_STYLES[point.risk_level] : null;
-                      return (
-                        <tr
-                          key={point.period}
-                          className="dark-table-row"
-                          style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                        >
-                          <td className="py-3 px-4 font-medium" style={{ color: 'var(--text-primary)' }}>
-                            {point.period}
-                          </td>
-                          <td className="py-3 px-4 text-right" style={{ color: 'var(--text-primary)' }}>
-                            {point.predicted_accidents}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {riskStyle ? (
-                              <span
-                                className="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
-                                style={{
-                                  background: riskStyle.bg,
-                                  color: riskStyle.color,
-                                  border: `1px solid ${riskStyle.border}`,
-                                  boxShadow: riskStyle.glow,
-                                }}
-                              >
-                                {point.risk_level}
-                              </span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="h-80 mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={forecast.points} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
+                    <XAxis
+                      dataKey="period"
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                      tickLine={false}
+                      axisLine={{ stroke: 'rgba(148, 163, 184, 0.15)' }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                      tickLine={false}
+                      axisLine={{ stroke: 'rgba(148, 163, 184, 0.15)' }}
+                    />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(139, 92, 246, 0.08)' }} />
+                    <defs>
+                      <linearGradient id="forecastPurpleGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#a78bfa" stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.6} />
+                      </linearGradient>
+                    </defs>
+                    <Bar dataKey="predicted_accidents" fill="url(#forecastPurpleGradient)" radius={[6, 6, 0, 0]} name="Predicted accidents" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           )}
