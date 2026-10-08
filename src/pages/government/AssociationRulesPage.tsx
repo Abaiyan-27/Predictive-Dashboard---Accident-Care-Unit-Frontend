@@ -16,9 +16,6 @@ function formatItem(raw: string): string {
   return `${field}: ${value}`;
 }
 
-function isSeverityItem(item: string) {
-  return item.toLowerCase().startsWith('severity_label=');
-}
 
 function severityFromItem(item: string): 'high' | 'low' | null {
   const lower = item.toLowerCase();

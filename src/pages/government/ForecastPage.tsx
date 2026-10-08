@@ -13,7 +13,7 @@ import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { getAccidentForecast, getAccidentTrends, getHistoricalAccidentTrends } from '../../api';
 import { getApiErrorMessage } from '../../api/client';
 import type { AccidentForecast, AccidentTrend } from '../../types';
-import { RISK_BADGE_STYLES, thStyle, tooltipStyle } from './governmentData';
+import { RISK_BADGE_STYLES, tooltipStyle } from './governmentData';
 
 /**
  * Monthly accident volume: history and the seasonal-naive forecast built from
