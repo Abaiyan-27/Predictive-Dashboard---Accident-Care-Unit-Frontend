@@ -233,10 +233,35 @@ export interface XAICounterfactualRecord {
   any_flip: boolean;
 }
 
+/** One factor in a SHAP explanation: its effect on the explained prediction (log-odds). */
+export interface ShapFactor {
+  factor: string;
+  value: string;
+  effect: 'strong' | 'moderate' | 'slight';
+  shap: number;
+}
+
+/** SHAP explanation of one doctor-model prediction (POST /xai/explain). */
 export interface XAIExplanation {
   model: string;
-  predicted_class?: string;
-  doctor_explanation: string[];
+  title: string;
+  /** False when the model cannot run yet (e.g. no treatment recorded); see message. */
+  available: boolean;
+  message?: string;
+  prediction?: string;
+  headline?: string;
+  /** How the predicted outcome is phrased in "Points towards …". */
+  outcome?: string;
+  probabilities?: Record<string, number>;
+  points_towards?: ShapFactor[];
+  points_away?: ShapFactor[];
+  not_recorded?: string[];
+  note?: string | null;
+  disclaimer: string;
+  method: string;
+  doctor_text?: string;
+  /** The stored prediction this explains, when it is the current one. */
+  prediction_id?: string | null;
 }
 
 // ── Patient ─────────────────────────────────────────────────────────────────
@@ -427,18 +452,33 @@ export interface AccidentForecast {
   } | null;
 }
 
+/** The notebook's strength bands, by lift. */
+export type RuleStrength = 'very strong' | 'strong' | 'moderate' | 'mild';
+
+/** One plain-language rule from Association_Rule_Mining.ipynb. */
 export interface AssociationRule {
-  antecedents: string[];
-  consequents: string[];
-  support: number;
+  rank: number;
+  rule: string;
+  interpretation: string;
+  strength: RuleStrength;
+  topic: string;
+  accidents: number;
   confidence: number;
   lift: number;
+  if_items: string[];
+  then_items: string[];
 }
 
 export interface AssociationRulesResponse {
   status: string;
   total_rules: number;
-  thresholds: Record<string, number>;
+  matched_rules: number;
+  total_accidents: number | null;
+  thresholds: { min_support?: number; min_confidence?: number; min_lift?: number };
+  stability: { n_splits?: number; stability_floor?: number };
+  topics: Record<string, number>;
+  strengths: Record<RuleStrength, number>;
+  disclaimer: string;
   rules: AssociationRule[];
   message: string | null;
 }

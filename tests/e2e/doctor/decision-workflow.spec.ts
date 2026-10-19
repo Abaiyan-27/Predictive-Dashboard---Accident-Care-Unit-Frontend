@@ -59,6 +59,22 @@ function episode(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** A SHAP explanation as the backend returns it (shape of app/services/shap_explainer.py). */
+const SHAP_STAY = {
+  model: 'stay_duration', title: 'Expected hospital stay', available: true, prediction: '2-3 days',
+  headline: '2-3 days (53% probability)', outcome: '2-3 days',
+  probabilities: { '0-1 days': 0.21, '2-3 days': 0.53, '4+ days': 0.26 },
+  points_towards: [
+    { factor: 'Second treatment', value: 'wound cleaning and dressing', effect: 'moderate', shap: 0.41 },
+    { factor: 'Main injury type', value: 'fracture', effect: 'slight', shap: 0.12 },
+  ],
+  points_away: [{ factor: 'Investigation done', value: 'mri scan', effect: 'moderate', shap: -0.3 }],
+  not_recorded: ['Second injury type'], note: null,
+  disclaimer: 'Decision support only. The final clinical decision rests with the doctor.',
+  method: 'SHAP (LinearExplainer): exact attributions for this logistic-regression model',
+  doctor_text: '…', prediction_id: 'p-stay',
+};
+
 interface Mock { requests: Request[]; episode: ReturnType<typeof episode>; gets: number; decisionStatus: number }
 
 /** Opens one page of the episode: '' (overview), 'severity', 'stay', 'transfer' or 'discharge'. */
@@ -108,7 +124,7 @@ async function setUp(page: Page, initial = episode(), section = ''): Promise<Moc
       }
       return json(mock.episode, 201);
     }
-    if (method === 'POST' && path === '/xai/explain') return json({ model: 'stay_duration', doctor_explanation: ['Why: test'] });
+    if (method === 'POST' && path === '/xai/explain') return json(SHAP_STAY);
     return json({ detail: `unmocked ${method} ${path}` }, 404);
   });
   await page.goto(`/doctor/episodes/${ACCIDENT}${section ? `/${section}` : ''}`);
@@ -354,4 +370,30 @@ test('the doctor list shows an error instead of a fake zero count', async ({ pag
   await expect(page.getByRole('alert')).toContainText('Database unavailable');
   await expect(page.locator('main')).not.toContainText('0 patients');
   await expect(page.locator('main')).not.toContainText('No patients found');
+});
+
+test('the SHAP explanation shows the factors for and against the prediction', async ({ page }) => {
+  const mock = await setUp(page, episode(), 'stay');
+  await page.getByRole('button', { name: 'Explain this prediction (SHAP)' }).click();
+  const panel = page.getByTestId('shap-explanation');
+  await expect(panel.getByTestId('shap-headline')).toHaveText('2-3 days (53% probability)');
+  await expect(panel.getByTestId('shap-towards')).toContainText('Points towards 2-3 days');
+  await expect(panel.getByTestId('shap-towards')).toContainText('Second treatment: wound cleaning and dressing');
+  await expect(panel.getByTestId('shap-away')).toContainText('Investigation done: mri scan');
+  await expect(panel).toContainText('Not yet recorded: Second injury type');
+  await expect(panel).toContainText('The final clinical decision rests with the doctor.');
+  const sent = mock.requests.find((r) => new URL(r.url()).pathname === '/api/xai/explain');
+  expect(sent?.postDataJSON()).toEqual({ model_name: 'stay_duration', accident_id: ACCIDENT });
+});
+
+test('an explanation that cannot be computed yet says why', async ({ page }) => {
+  await setUp(page, episode(), 'stay');
+  await page.route((url) => url.pathname === '/api/xai/explain', (route) => route.fulfill({
+    status: 200, headers: { 'access-control-allow-origin': '*' },
+    json: { model: 'stay_duration', title: 'Expected hospital stay', available: false,
+      message: 'Waiting for post-treatment inputs: Investigation Done.',
+      disclaimer: 'Decision support only. The final clinical decision rests with the doctor.', method: 'SHAP' } }));
+  await page.getByRole('button', { name: 'Explain this prediction (SHAP)' }).click();
+  await expect(page.getByTestId('shap-explanation')).toContainText('Waiting for post-treatment inputs');
+  await expect(page.getByTestId('shap-towards')).toHaveCount(0);
 });

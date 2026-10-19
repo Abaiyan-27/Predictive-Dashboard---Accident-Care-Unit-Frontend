@@ -19,11 +19,25 @@ const FORECAST = {
   risk_thresholds: { medium_min: 400, high_min: 500, method: 'quantiles' },
   points: [{ period: 'Nov 2026', predicted_accidents: 512, lower_bound: null, upper_bound: null, risk_level: 'High' }],
 };
+const RULE = { strength: 'mild', topic: 'Road', accidents: 120, confidence: 0.6, lift: 1.3 };
 const RULES = {
-  status: 'OK', total_rules: 2, thresholds: { min_support: 0.02, min_confidence: 0.5, min_lift: 1.2 }, message: '2 validated rules available',
+  status: 'OK', total_rules: 3, matched_rules: 3, total_accidents: 6178, message: null,
+  thresholds: { min_support: 0.02, min_confidence: 0.5, min_lift: 1.2 }, stability: { n_splits: 5, stability_floor: 0.6 },
+  topics: { Helmet: 1, Road: 1, Speed: 1 }, strengths: { 'very strong': 1, strong: 0, moderate: 1, mild: 1 },
+  disclaimer: 'These are associations found in past accidents, not proof of cause.',
   rules: [
-    { antecedents: ['Helmet Worn=no'], consequents: ['severity_label=high'], support: 0.1, confidence: 0.8, lift: 1.9 },
-    { antecedents: ['Road Type=bend'], consequents: ['Speed=40 - 80 km/h'], support: 0.05, confidence: 0.6, lift: 1.3 },
+    { ...RULE, rank: 1, strength: 'very strong', topic: 'Road', accidents: 128, confidence: 0.59, lift: 3.92,
+      rule: 'When road signals were present: in 59% of these accidents, it happened on a highway.',
+      interpretation: 'This is 3.9 times more likely than in accidents overall (about 128 accidents).',
+      if_items: ['Road Signals Exist=yes'], then_items: ['Category of Road=highway'] },
+    { ...RULE, rank: 2, strength: 'moderate', topic: 'Helmet', accidents: 754, confidence: 0.65, lift: 1.9,
+      rule: 'When it happened on a highway: in 65% of these accidents, a helmet was worn.',
+      interpretation: 'This is 1.9 times more likely than in accidents overall (about 754 accidents).',
+      if_items: ['Category of Road=highway'], then_items: ['Helmet Worn=yes'] },
+    { ...RULE, rank: 3, topic: 'Speed', accidents: 300,
+      rule: 'When it happened at a bend: in 60% of these accidents, the speed was 40 - 80 km/h.',
+      interpretation: 'This is 1.3 times more likely than in accidents overall (about 300 accidents).',
+      if_items: ['Road Type=bend'], then_items: ['Approximate Speed=40 - 80 km/h'] },
   ],
 };
 
@@ -165,15 +179,38 @@ test.describe('Forecast and association rules', () => {
     expect(unique(mock.gets)).toEqual(['/government/accident-forecast?horizon=6', '/government/accident-historical-trends', '/government/accident-trends']);
   });
 
-  test('Association Rules page shows the precomputed rules read-only, with filters', async ({ page }) => {
+  test('Association Rules page shows the notebook\'s plain-language rules read-only, with filters', async ({ page }) => {
     const mock = await setUp(page);
     await page.goto('/government/associations');
-    await expect(page.getByRole('heading', { name: 'Association rules' })).toBeVisible();
-    await expect(page.getByText('Helmet Worn: no')).toBeVisible();
-    await expect(page.getByTestId('government-associations')).toContainText('not outputs of the Severity model');
-    await page.getByRole('button', { name: '→ severity_label: high (dataset)' }).click();
-    await expect.poll(() => mock.gets.at(-1)).toBe('/government/association-rules?consequent=severity_label%3Dhigh&limit=1000&sort_by=lift');
-    await expectReadOnly(page, ['All rules', '→ severity_label: high (dataset)', '→ severity_label: low (dataset)', 'By lift', 'By confidence', 'By support']);
+    await expect(page.getByRole('heading', { name: 'Association rules', exact: true })).toBeVisible();
+    const cards = page.getByTestId('rule-card');
+    await expect(cards).toHaveCount(3);
+    await expect(cards.first()).toContainText('When road signals were present: in 59% of these accidents, it happened on a highway.');
+    await expect(cards.first()).toContainText('Very strong link');
+    await expect(cards.first()).toContainText('This is 3.9 times more likely');
+    const panel = page.getByTestId('government-associations');
+    await expect(panel).toContainText('3 patterns found in 6,178 past accident records');
+    await expect(panel).toContainText('not proof of cause');
+    await expect(panel).toContainText('not an output of the Severity model');
+
+    await page.getByRole('button', { name: 'Helmet (1)' }).click();
+    await expect(cards).toHaveCount(1);
+    await expect(cards.first()).toContainText('a helmet was worn');
+    await expect(cards.first()).toContainText('Clear link');
+    await page.getByRole('button', { name: 'All topics' }).click();
+    await page.getByRole('button', { name: 'Mild link' }).click();
+    await expect(cards).toHaveCount(1);
+    await page.getByRole('button', { name: 'Any strength' }).click();
+    await page.getByRole('button', { name: 'Most accidents' }).click();
+    await expect(cards.first()).toContainText('about 754');
+    await page.getByLabel('Search patterns').fill('bend');
+    await expect(cards).toHaveCount(1);
+    await expect(page.getByTestId('rule-count')).toHaveText('Showing 1 of 3 patterns');
+
+    // One request for the whole list; filtering happens on the page.
+    expect(unique(mock.gets)).toEqual(['/government/association-rules?limit=1000']);
+    await expectReadOnly(page, ['All topics', 'Helmet (1)', 'Road (1)', 'Speed (1)', 'Any strength', 'Very strong link',
+      'Strong link', 'Clear link', 'Mild link', 'Strongest link', 'Most consistent', 'Most accidents']);
     onlyForecastAndRuleCalls(mock);
   });
 });

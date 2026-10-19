@@ -546,12 +546,14 @@ export async function getAccidentForecast(horizon = 6): Promise<AccidentForecast
 }
 
 export async function getAssociationRules(
-  options: { consequent?: string; limit?: number; sortBy?: string } = {},
+  options: { topic?: string; strength?: string; search?: string; sortBy?: string; limit?: number } = {},
 ): Promise<AssociationRulesResponse> {
   const params = new URLSearchParams();
-  if (options.consequent) params.set('consequent', options.consequent);
-  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  if (options.topic) params.set('topic', options.topic);
+  if (options.strength) params.set('strength', options.strength);
+  if (options.search) params.set('search', options.search);
   if (options.sortBy) params.set('sort_by', options.sortBy);
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
   const qs = params.toString() ? `?${params.toString()}` : '';
   const { data } = await apiClient.get<AssociationRulesResponse>(
     `/government/association-rules${qs}`,

@@ -181,7 +181,7 @@ export function DoctorModelPanel({
           explanation ? <ExplanationPanel data={explanation} /> : (
             <button type="button" onClick={() => onExplain(status)} disabled={explaining}
               className="text-xs underline text-[color:var(--text-accent)]">
-              {explaining ? 'Generating explanation…' : 'Show AI explanation'}
+              {explaining ? 'Generating explanation…' : 'Explain this prediction (SHAP)'}
             </button>
           )
         )}
